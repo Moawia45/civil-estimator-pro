@@ -203,6 +203,10 @@ export interface ReportConfig {
   includeLaborEstimate: boolean;
   currency: Currency;
   logoBase64?: string;
+  projectName?: string;
+  totalValue?: number;
+  contingency?: number;
+  vatRate?: number;
 }
 
 // ---- Calculation Results ----

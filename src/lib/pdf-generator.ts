@@ -318,7 +318,7 @@ export function generateBOQPdf(
   boqSections.forEach((section, sIdx) => {
     if (!section) return; // skip null/undefined sections
 
-    const sectionName  = section.name  || `Section ${sIdx + 1}`;
+    const sectionName  = section.title  || `Section ${sIdx + 1}`;
     const sectionItems = Array.isArray(section.items) ? section.items : [];
 
     // Check page overflow
@@ -421,7 +421,7 @@ export function generateBOQPdf(
     .filter((sec) => sec && Array.isArray(sec.items))
     .map((sec, i) => [
       String(i + 1),
-      sec.name || `Section ${i + 1}`,
+      sec.title || `Section ${i + 1}`,
       `PKR ${formatNumber((sec.items || []).reduce((s, it) => s + ((it?.quantity ?? 0) * (it?.rate ?? 0)), 0))}`,
     ]);
 
@@ -501,8 +501,8 @@ export function generateBOQPdf(
         m.material,
         formatNumber(m.quantity),
         m.unit,
-        formatNumber(m.unitRate),
-        formatNumber(m.totalCost),
+        formatNumber(m.rate),
+        formatNumber(m.total),
       ]),
       margin: { left: p.ml, right: p.mr },
       styles: { fontSize: 8.5, cellPadding: 3.5 },
