@@ -6,7 +6,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { useProject } from '@/context/ProjectContext';
-import { analyzeDrawing, isGeminiConfigured } from '@/lib/gemini';
+import { analyzeDrawing } from '@/lib/gemini';
 import { AIAnalysisResult, DetectedElement, StructuralElement, UploadedFile } from '@/lib/types';
 import { calculateVolume, calculateArea } from '@/lib/calculations';
 
@@ -46,10 +46,6 @@ export default function UploadDrawingPage() {
 
   const handleAnalyze = async () => {
     if (!imagePreview) return;
-    if (!isGeminiConfigured()) {
-      setError('⚙️ Gemini API key not configured. Click the Settings button in the header to add your API key from https://aistudio.google.com/apikey');
-      return;
-    }
 
     setAnalyzing(true);
     setError(null);
