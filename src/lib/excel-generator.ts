@@ -83,7 +83,7 @@ function getMaterialQtyFormula(key: string): string | undefined {
     return `8*SUMIF('Detailed BOQ'!B:B, "*M20*", 'Detailed BOQ'!D:D) + 6.4*SUMIF('Detailed BOQ'!B:B, "*M15*", 'Detailed BOQ'!D:D) + 4.5*SUMIF('Detailed BOQ'!B:B, "*M10*", 'Detailed BOQ'!D:D) + 10*SUMIF('Detailed BOQ'!B:B, "*M25*", 'Detailed BOQ'!D:D) + 12*SUMIF('Detailed BOQ'!B:B, "*M30*", 'Detailed BOQ'!D:D)`;
   }
   if (k === 'cement (mortar)') {
-    return `1.4*SUMIF('Detailed BOQ'!B:B, "*Brickwork*9\\\"*", 'Detailed BOQ'!D:D) + 0.16*SUMIF('Detailed BOQ'!B:B, "*Brickwork*4.5\\\"*", 'Detailed BOQ'!D:D)`;
+    return `1.4*SUMIF('Detailed BOQ'!B:B, "*Brickwork*9""*", 'Detailed BOQ'!D:D) + 0.16*SUMIF('Detailed BOQ'!B:B, "*Brickwork*4.5""*", 'Detailed BOQ'!D:D)`;
   }
   if (k === 'plaster cement') {
     return `0.09*SUMIF('Detailed BOQ'!B:B, "*Plaster*12mm*", 'Detailed BOQ'!D:D) + 0.15*SUMIF('Detailed BOQ'!B:B, "*Plaster*20mm*", 'Detailed BOQ'!D:D)`;
@@ -92,7 +92,7 @@ function getMaterialQtyFormula(key: string): string | undefined {
     return `0.425*SUMIF('Detailed BOQ'!B:B, "*M20*", 'Detailed BOQ'!D:D) + 0.45*SUMIF('Detailed BOQ'!B:B, "*M15*", 'Detailed BOQ'!D:D) + 0.47*SUMIF('Detailed BOQ'!B:B, "*M10*", 'Detailed BOQ'!D:D) + 0.4*SUMIF('Detailed BOQ'!B:B, "*M25*", 'Detailed BOQ'!D:D) + 0.38*SUMIF('Detailed BOQ'!B:B, "*M30*", 'Detailed BOQ'!D:D)`;
   }
   if (k === 'sand (mortar)') {
-    return `0.3*SUMIF('Detailed BOQ'!B:B, "*Brickwork*9\\\"*", 'Detailed BOQ'!D:D) + 0.035*SUMIF('Detailed BOQ'!B:B, "*Brickwork*4.5\\\"*", 'Detailed BOQ'!D:D)`;
+    return `0.3*SUMIF('Detailed BOQ'!B:B, "*Brickwork*9""*", 'Detailed BOQ'!D:D) + 0.035*SUMIF('Detailed BOQ'!B:B, "*Brickwork*4.5""*", 'Detailed BOQ'!D:D)`;
   }
   if (k === 'plaster sand') {
     return `0.015*SUMIF('Detailed BOQ'!B:B, "*Plaster*12mm*", 'Detailed BOQ'!D:D) + 0.025*SUMIF('Detailed BOQ'!B:B, "*Plaster*20mm*", 'Detailed BOQ'!D:D)`;
@@ -101,7 +101,7 @@ function getMaterialQtyFormula(key: string): string | undefined {
     return `0.85*SUMIF('Detailed BOQ'!B:B, "*M20*", 'Detailed BOQ'!D:D) + 0.9*SUMIF('Detailed BOQ'!B:B, "*M15*", 'Detailed BOQ'!D:D) + 0.94*SUMIF('Detailed BOQ'!B:B, "*M10*", 'Detailed BOQ'!D:D) + 0.8*SUMIF('Detailed BOQ'!B:B, "*M25*", 'Detailed BOQ'!D:D) + 0.76*SUMIF('Detailed BOQ'!B:B, "*M30*", 'Detailed BOQ'!D:D)`;
   }
   if (k === 'bricks') {
-    return `500*SUMIF('Detailed BOQ'!B:B, "*Brickwork*9\\\"*", 'Detailed BOQ'!D:D) + 55*SUMIF('Detailed BOQ'!B:B, "*Brickwork*4.5\\\"*", 'Detailed BOQ'!D:D)`;
+    return `500*SUMIF('Detailed BOQ'!B:B, "*Brickwork*9""*", 'Detailed BOQ'!D:D) + 55*SUMIF('Detailed BOQ'!B:B, "*Brickwork*4.5""*", 'Detailed BOQ'!D:D)`;
   }
   if (k === 'steel reinforcement' || k.includes('steel')) {
     return `SUMIF('Detailed BOQ'!B:B, "*Steel*", 'Detailed BOQ'!D:D)`;
@@ -198,8 +198,8 @@ export function downloadBOQExcel(
       itemCounter++;
       currentExcelRow++;
 
-      // XLOOKUP rate from MasterRates using cell reference, Amount = Qty * Rate
-      const rateFormula = `XLOOKUP(B${currentExcelRow}, 'MasterRates'!A:A, 'MasterRates'!B:B)`;
+      // VLOOKUP rate from MasterRates using cell reference, Amount = Qty * Rate
+      const rateFormula = `VLOOKUP(B${currentExcelRow}, 'MasterRates'!A:C, 2, FALSE)`;
       const amountFormula = `D${currentExcelRow}*E${currentExcelRow}`;
 
       detailedData.push([
@@ -347,7 +347,7 @@ export function downloadBOQExcel(
   
   materialTotals.forEach((val, key) => {
     matExcelRow++;
-    const rateFormula = `XLOOKUP(A${matExcelRow}, 'MasterRates'!A:A, 'MasterRates'!B:B)`;
+    const rateFormula = `VLOOKUP(A${matExcelRow}, 'MasterRates'!A:C, 2, FALSE)`;
     const totalFormula = `B${matExcelRow}*D${matExcelRow}`;
     const totalVal = val.quantity * val.rate;
     matGrandTotal += totalVal;
