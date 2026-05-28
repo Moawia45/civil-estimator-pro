@@ -149,6 +149,7 @@ export interface AIAnalysisResult {
   rawResponse: string;
   confidence: number;
   retryCount: number;
+  detectedUnit?: 'ft' | 'm';
 }
 
 export interface DetectedElement {

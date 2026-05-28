@@ -24,6 +24,7 @@ export default function UploadDrawingPage() {
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [mode, setMode] = useState<'auto' | 'manual'>('auto');
+  const [drawingUnit, setDrawingUnit] = useState<'ft' | 'm'>('ft');
 
   const handleFile = useCallback((f: File) => {
     setFile(f);
@@ -60,6 +61,9 @@ export default function UploadDrawingPage() {
 
       setAnalysisResult(result);
       setEditedElements(result.elements);
+      if (result.detectedUnit) {
+        setDrawingUnit(result.detectedUnit);
+      }
 
       if (!result.success) {
         setError(`AI analysis returned no results: ${result.rawResponse}`);
@@ -106,18 +110,23 @@ export default function UploadDrawingPage() {
         ? { ...el.dimensions, ...el.manualValues }
         : el.dimensions;
 
+      const conversionFactor = drawingUnit === 'ft' ? 0.3048 : 1.0;
+      const lengthM = (dims.length || 0) * conversionFactor;
+      const widthM = (dims.width || 0) * conversionFactor;
+      const heightM = (dims.height || 0) * conversionFactor;
+
       const element: StructuralElement = {
         id: generateId(),
         type: el.type,
         name: el.label,
-        length: dims.length || 0,
-        width: dims.width || 0,
-        height: dims.height || 0,
+        length: parseFloat(lengthM.toFixed(4)),
+        width: parseFloat(widthM.toFixed(4)),
+        height: parseFloat(heightM.toFixed(4)),
         quantity: 1,
         unit: 'm',
-        volume: calculateVolume(dims.length || 0, dims.width || 0, dims.height || 0),
-        area: calculateArea(dims.length || 0, dims.width || 0),
-        notes: `AI detected (confidence: ${(el.confidence * 100).toFixed(0)}%)`,
+        volume: calculateVolume(lengthM, widthM, heightM),
+        area: calculateArea(lengthM, widthM),
+        notes: `AI detected (${drawingUnit === 'ft' ? 'Imperial converted to Metric' : 'Metric'}). confidence: ${(el.confidence * 100).toFixed(0)}%`,
       };
       addElement(element);
     });
@@ -261,8 +270,25 @@ export default function UploadDrawingPage() {
                 </div>
               </div>
 
+              {/* Unit Override Dropdown */}
+              <div style={{ marginBottom: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-4)', background: 'var(--bg-secondary)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>📐 Drawing Unit:</label>
+                <select
+                  className="form-input"
+                  style={{ width: 'auto', padding: '4px 8px', fontSize: '0.85rem' }}
+                  value={drawingUnit}
+                  onChange={(e) => setDrawingUnit(e.target.value as 'ft' | 'm')}
+                >
+                  <option value="ft">Imperial (Feet)</option>
+                  <option value="m">Metric (Meters)</option>
+                </select>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  (AI detected: {analysisResult?.detectedUnit === 'm' ? 'Meters' : 'Feet'})
+                </span>
+              </div>
+
               <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-4)' }}>
-                Detected {editedElements.length} elements. Edit values below if needed.
+                Detected {editedElements.length} elements. Edit values in native unit ({drawingUnit}) below if needed.
               </p>
 
               {/* Detected Elements Table */}
@@ -272,9 +298,9 @@ export default function UploadDrawingPage() {
                     <tr>
                       <th>Type</th>
                       <th>Label</th>
-                      <th>Length (m)</th>
-                      <th>Width (m)</th>
-                      <th>Height (m)</th>
+                      <th>Length ({drawingUnit})</th>
+                      <th>Width ({drawingUnit})</th>
+                      <th>Height ({drawingUnit})</th>
                       <th>Confidence</th>
                     </tr>
                   </thead>

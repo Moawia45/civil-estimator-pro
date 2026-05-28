@@ -38,6 +38,93 @@ function getLocalWallDeductions(wallName: string, elements: StructuralElement[])
 }
 
 /**
+ * Helper to get the rate formula for a composite item referencing raw materials in MasterRates.
+ */
+function getCompositeRateFormula(materialName: string): string | undefined {
+  const name = materialName.trim().toLowerCase();
+  
+  if (name.includes('rcc m20') || name === 'concrete m20' || name === 'rcc m20 (1:1.5:3)' || name === 'concrete rcc m20') {
+    return `8*INDEX(B:B, MATCH("Cement", A:A, 0)) + 0.425*INDEX(B:B, MATCH("Sand (Fine Agg.)", A:A, 0)) + 0.85*INDEX(B:B, MATCH("Coarse Aggregate", A:A, 0))`;
+  }
+  if (name.includes('pcc m15') || name === 'concrete m15' || name === 'pcc m15 (1:2:4)') {
+    return `6.4*INDEX(B:B, MATCH("Cement", A:A, 0)) + 0.45*INDEX(B:B, MATCH("Sand (Fine Agg.)", A:A, 0)) + 0.9*INDEX(B:B, MATCH("Coarse Aggregate", A:A, 0))`;
+  }
+  if (name.includes('pcc m10') || name === 'concrete m10' || name === 'pcc m10 (1:3:6)') {
+    return `4.5*INDEX(B:B, MATCH("Cement", A:A, 0)) + 0.47*INDEX(B:B, MATCH("Sand (Fine Agg.)", A:A, 0)) + 0.94*INDEX(B:B, MATCH("Coarse Aggregate", A:A, 0))`;
+  }
+  if (name.includes('rcc m25') || name === 'concrete m25') {
+    return `10*INDEX(B:B, MATCH("Cement", A:A, 0)) + 0.4*INDEX(B:B, MATCH("Sand (Fine Agg.)", A:A, 0)) + 0.8*INDEX(B:B, MATCH("Coarse Aggregate", A:A, 0))`;
+  }
+  if (name.includes('rcc m30') || name === 'concrete m30') {
+    return `12*INDEX(B:B, MATCH("Cement", A:A, 0)) + 0.38*INDEX(B:B, MATCH("Sand (Fine Agg.)", A:A, 0)) + 0.76*INDEX(B:B, MATCH("Coarse Aggregate", A:A, 0))`;
+  }
+  if (name.includes('brickwork in cement mortar (9")') || name.includes('brickwork (9")') || name.includes('brickwork 9"')) {
+    return `500*INDEX(B:B, MATCH("Bricks", A:A, 0)) + 1.4*INDEX(B:B, MATCH("Cement", A:A, 0)) + 0.3*INDEX(B:B, MATCH("Sand (Fine Agg.)", A:A, 0))`;
+  }
+  if (name.includes('brickwork in cement mortar (4.5")') || name.includes('brickwork (4.5")') || name.includes('brickwork 4.5"')) {
+    return `55*INDEX(B:B, MATCH("Bricks", A:A, 0)) + 0.16*INDEX(B:B, MATCH("Cement", A:A, 0)) + 0.035*INDEX(B:B, MATCH("Sand (Fine Agg.)", A:A, 0))`;
+  }
+  if (name.includes('cement plaster 12mm') || name.includes('plaster 12mm')) {
+    return `0.09*INDEX(B:B, MATCH("Cement", A:A, 0)) + 0.015*INDEX(B:B, MATCH("Sand (Fine Agg.)", A:A, 0))`;
+  }
+  if (name.includes('cement plaster 20mm') || name.includes('plaster 20mm')) {
+    return `0.15*INDEX(B:B, MATCH("Cement", A:A, 0)) + 0.025*INDEX(B:B, MATCH("Sand (Fine Agg.)", A:A, 0))`;
+  }
+  return undefined;
+}
+
+/**
+ * Helper to get the quantity formula for a raw material referencing composite items in Detailed BOQ.
+ */
+function getMaterialQtyFormula(key: string): string | undefined {
+  const k = key.trim().toLowerCase();
+  
+  if (k === 'cement') {
+    return `8*SUMIF('Detailed BOQ'!B:B, "*M20*", 'Detailed BOQ'!D:D) + 6.4*SUMIF('Detailed BOQ'!B:B, "*M15*", 'Detailed BOQ'!D:D) + 4.5*SUMIF('Detailed BOQ'!B:B, "*M10*", 'Detailed BOQ'!D:D) + 10*SUMIF('Detailed BOQ'!B:B, "*M25*", 'Detailed BOQ'!D:D) + 12*SUMIF('Detailed BOQ'!B:B, "*M30*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'cement (mortar)') {
+    return `1.4*SUMIF('Detailed BOQ'!B:B, "*Brickwork*9\\\"*", 'Detailed BOQ'!D:D) + 0.16*SUMIF('Detailed BOQ'!B:B, "*Brickwork*4.5\\\"*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'plaster cement') {
+    return `0.09*SUMIF('Detailed BOQ'!B:B, "*Plaster*12mm*", 'Detailed BOQ'!D:D) + 0.15*SUMIF('Detailed BOQ'!B:B, "*Plaster*20mm*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'sand (fine agg.)') {
+    return `0.425*SUMIF('Detailed BOQ'!B:B, "*M20*", 'Detailed BOQ'!D:D) + 0.45*SUMIF('Detailed BOQ'!B:B, "*M15*", 'Detailed BOQ'!D:D) + 0.47*SUMIF('Detailed BOQ'!B:B, "*M10*", 'Detailed BOQ'!D:D) + 0.4*SUMIF('Detailed BOQ'!B:B, "*M25*", 'Detailed BOQ'!D:D) + 0.38*SUMIF('Detailed BOQ'!B:B, "*M30*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'sand (mortar)') {
+    return `0.3*SUMIF('Detailed BOQ'!B:B, "*Brickwork*9\\\"*", 'Detailed BOQ'!D:D) + 0.035*SUMIF('Detailed BOQ'!B:B, "*Brickwork*4.5\\\"*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'plaster sand') {
+    return `0.015*SUMIF('Detailed BOQ'!B:B, "*Plaster*12mm*", 'Detailed BOQ'!D:D) + 0.025*SUMIF('Detailed BOQ'!B:B, "*Plaster*20mm*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'coarse aggregate') {
+    return `0.85*SUMIF('Detailed BOQ'!B:B, "*M20*", 'Detailed BOQ'!D:D) + 0.9*SUMIF('Detailed BOQ'!B:B, "*M15*", 'Detailed BOQ'!D:D) + 0.94*SUMIF('Detailed BOQ'!B:B, "*M10*", 'Detailed BOQ'!D:D) + 0.8*SUMIF('Detailed BOQ'!B:B, "*M25*", 'Detailed BOQ'!D:D) + 0.76*SUMIF('Detailed BOQ'!B:B, "*M30*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'bricks') {
+    return `500*SUMIF('Detailed BOQ'!B:B, "*Brickwork*9\\\"*", 'Detailed BOQ'!D:D) + 55*SUMIF('Detailed BOQ'!B:B, "*Brickwork*4.5\\\"*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'steel reinforcement' || k.includes('steel')) {
+    return `SUMIF('Detailed BOQ'!B:B, "*Steel*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'binding wire') {
+    return `0.01*SUMIF('Detailed BOQ'!B:B, "*Steel*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'formwork') {
+    return `SUMIF('Detailed BOQ'!B:B, "*Formwork*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'flush door (standard)' || k === 'flush door') {
+    return `SUMIF('Detailed BOQ'!B:B, "*Door*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'wooden window') {
+    return `SUMIF('Detailed BOQ'!B:B, "*Window*", 'Detailed BOQ'!D:D)`;
+  }
+  if (k === 'enamel paint') {
+    return `SUMIF('Detailed BOQ'!B:B, "*Paint*", 'Detailed BOQ'!D:D)`;
+  }
+  return undefined;
+}
+
+/**
  * Generate and download BOQ as Excel file with formulas
  */
 export function downloadBOQExcel(
@@ -67,11 +154,20 @@ export function downloadBOQExcel(
     });
   });
 
-  const masterRatesData: (string | number)[][] = [
+  const masterRatesData: any[][] = [
     ['Material / Item Name', 'Rate', 'Unit']
   ];
   uniqueMaterials.forEach(m => {
-    masterRatesData.push([m.name, m.rate, m.unit]);
+    const compositeFormula = getCompositeRateFormula(m.name);
+    if (compositeFormula) {
+      masterRatesData.push([
+        m.name,
+        { t: 'n', f: compositeFormula, v: m.rate },
+        m.unit
+      ]);
+    } else {
+      masterRatesData.push([m.name, m.rate, m.unit]);
+    }
   });
   const masterRatesSheet = XLSX.utils.aoa_to_sheet(masterRatesData);
   masterRatesSheet['!cols'] = [
@@ -102,11 +198,8 @@ export function downloadBOQExcel(
       itemCounter++;
       currentExcelRow++;
 
-      const key = item.materialName || item.description;
-      const escapedKey = key.replace(/"/g, '""');
-      
-      // XLOOKUP rate from MasterRates, Amount = Qty * Rate
-      const rateFormula = `XLOOKUP("${escapedKey}", MasterRates!A:A, MasterRates!B:B)`;
+      // XLOOKUP rate from MasterRates using cell reference, Amount = Qty * Rate
+      const rateFormula = `XLOOKUP(B${currentExcelRow}, 'MasterRates'!A:A, 'MasterRates'!B:B)`;
       const amountFormula = `D${currentExcelRow}*E${currentExcelRow}`;
 
       detailedData.push([
@@ -254,15 +347,20 @@ export function downloadBOQExcel(
   
   materialTotals.forEach((val, key) => {
     matExcelRow++;
-    const escapedKey = key.replace(/"/g, '""');
-    const rateFormula = `XLOOKUP("${escapedKey}", MasterRates!A:A, MasterRates!B:B)`;
+    const rateFormula = `XLOOKUP(A${matExcelRow}, 'MasterRates'!A:A, 'MasterRates'!B:B)`;
     const totalFormula = `B${matExcelRow}*D${matExcelRow}`;
     const totalVal = val.quantity * val.rate;
     matGrandTotal += totalVal;
 
+    // Use SUMIF formula referencing Detailed BOQ quantities
+    const qtyFormula = getMaterialQtyFormula(key);
+    const qtyCell = qtyFormula 
+      ? { t: 'n', f: qtyFormula, v: val.quantity } 
+      : parseFloat(val.quantity.toFixed(3));
+
     matData.push([
       key,
-      parseFloat(val.quantity.toFixed(3)),
+      qtyCell,
       val.unit,
       { t: 'n', f: rateFormula, v: val.rate },
       { t: 'n', f: totalFormula, v: totalVal }

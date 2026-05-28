@@ -41,6 +41,42 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }
 
+function recalculateCompositeRates(materials: Material[]): Material[] {
+  const findRate = (id: string): number => {
+    return materials.find(m => m.id === id)?.rate ?? 0;
+  };
+
+  const cement = findRate('raw-cement');
+  const sand = findRate('raw-sand');
+  const aggregate = findRate('raw-aggregate');
+  const bricks = findRate('raw-bricks');
+
+  return materials.map(m => {
+    switch (m.id) {
+      case 'pcc-m10':
+        return { ...m, rate: parseFloat((4.5 * cement + 0.47 * sand + 0.94 * aggregate).toFixed(2)) };
+      case 'pcc-m15':
+        return { ...m, rate: parseFloat((6.4 * cement + 0.45 * sand + 0.9 * aggregate).toFixed(2)) };
+      case 'rcc-m20':
+        return { ...m, rate: parseFloat((8.0 * cement + 0.425 * sand + 0.85 * aggregate).toFixed(2)) };
+      case 'rcc-m25':
+        return { ...m, rate: parseFloat((10.0 * cement + 0.4 * sand + 0.8 * aggregate).toFixed(2)) };
+      case 'rcc-m30':
+        return { ...m, rate: parseFloat((12.0 * cement + 0.38 * sand + 0.76 * aggregate).toFixed(2)) };
+      case 'brick-9':
+        return { ...m, rate: parseFloat((500 * bricks + 1.4 * cement + 0.3 * sand).toFixed(2)) };
+      case 'brick-4.5':
+        return { ...m, rate: parseFloat((55 * bricks + 0.16 * cement + 0.035 * sand).toFixed(2)) };
+      case 'plaster-12':
+        return { ...m, rate: parseFloat((0.09 * cement + 0.015 * sand).toFixed(2)) };
+      case 'plaster-20':
+        return { ...m, rate: parseFloat((0.15 * cement + 0.025 * sand).toFixed(2)) };
+      default:
+        return m;
+    }
+  });
+}
+
 function createEmptyProject(): Project {
   return {
     id: generateId(),
@@ -68,6 +104,7 @@ const ProjectContext = createContext<ProjectContextType | null>(null);
 export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [project, setProject] = useState<Project>(createEmptyProject());
   const [projects, setProjects] = useState<Project[]>([]);
+  const currency = CURRENCIES[project.currency];
 
   // Load saved projects on mount
   useEffect(() => {
@@ -196,16 +233,70 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setMaterials = useCallback((materials: Material[]) => {
-    setProject(prev => ({ ...prev, materials, updatedAt: new Date().toISOString() }));
-  }, []);
+    setProject(prev => {
+      const updatedMaterials = recalculateCompositeRates(materials);
+      const updatedBoqSections = prev.boqSections.map(s => {
+        const newItems = s.items.map(item => {
+          const mat = updatedMaterials.find(m => m.id === item.materialId || m.name === item.materialName || m.name === item.description);
+          if (mat) {
+            const newRate = mat.rate * currency.rate;
+            return {
+              ...item,
+              rate: newRate,
+              amount: item.quantity * newRate
+            };
+          }
+          return item;
+        });
+        return {
+          ...s,
+          items: newItems,
+          subtotal: newItems.reduce((sum, i) => sum + i.amount, 0)
+        };
+      });
+
+      return {
+        ...prev,
+        materials: updatedMaterials,
+        boqSections: updatedBoqSections,
+        updatedAt: new Date().toISOString()
+      };
+    });
+  }, [currency.rate]);
 
   const updateMaterialRate = useCallback((id: string, rate: number) => {
-    setProject(prev => ({
-      ...prev,
-      materials: prev.materials.map(m => m.id === id ? { ...m, rate } : m),
-      updatedAt: new Date().toISOString(),
-    }));
-  }, []);
+    setProject(prev => {
+      let updatedMaterials = prev.materials.map(m => m.id === id ? { ...m, rate } : m);
+      updatedMaterials = recalculateCompositeRates(updatedMaterials);
+
+      const updatedBoqSections = prev.boqSections.map(s => {
+        const newItems = s.items.map(item => {
+          const mat = updatedMaterials.find(m => m.id === item.materialId || m.name === item.materialName || m.name === item.description);
+          if (mat) {
+            const newRate = mat.rate * currency.rate;
+            return {
+              ...item,
+              rate: newRate,
+              amount: item.quantity * newRate
+            };
+          }
+          return item;
+        });
+        return {
+          ...s,
+          items: newItems,
+          subtotal: newItems.reduce((sum, i) => sum + i.amount, 0)
+        };
+      });
+
+      return {
+        ...prev,
+        materials: updatedMaterials,
+        boqSections: updatedBoqSections,
+        updatedAt: new Date().toISOString()
+      };
+    });
+  }, [currency.rate]);
 
   const setCurrency = useCallback((code: CurrencyCode) => {
     setProject(prev => ({ ...prev, currency: code, updatedAt: new Date().toISOString() }));
@@ -268,8 +359,6 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       updatedAt: new Date().toISOString(),
     }));
   }, []);
-
-  const currency = CURRENCIES[project.currency];
 
   return (
     <ProjectContext.Provider value={{

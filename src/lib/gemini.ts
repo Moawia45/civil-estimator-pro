@@ -175,20 +175,22 @@ export async function analyzeDrawing(
   mimeType = 'image/jpeg'
 ): Promise<AIAnalysisResult> {
   const prompt = `You are an expert Civil Engineer and Quantity Surveyor.
-Analyze this construction floor plan drawing carefully and extract ALL structural elements (walls, slab, door openings, window openings).
+Analyze this construction floor plan drawing carefully. Look for text, annotations, scale, or labels indicating the units used (e.g., feet, inches, meters, mm).
+Extract ALL structural elements (walls, slab, door openings, window openings).
 
 Return ONLY a valid JSON object — no markdown, no explanation:
 {
+  "detectedUnit": "ft", // Must be "ft" if the drawing uses feet/inches, or "m" if the drawing uses meters/metric
   "elements": [
     {
       "type": "wall",
       "label": "External Wall North",
-      "dimensions": { "length": 3.505, "width": 0.2286, "height": 3.048 },
+      "dimensions": { "length": 11.5, "width": 0.75, "height": 10.0 }, // Keep dimensions in the native drawing unit!
       "confidence": 0.9
     }
   ],
   "dimensions": [
-    { "label": "Outer Length", "value": 3.505, "unit": "m", "confidence": 0.95 }
+    { "label": "Outer Length", "value": 11.5, "unit": "ft", "confidence": 0.95 }
   ],
   "overall_confidence": 0.85
 }
@@ -196,38 +198,38 @@ Return ONLY a valid JSON object — no markdown, no explanation:
 Element type must be one of: wall | slab | column | beam | foundation | footing | staircase | lintel | plinth | parapet | door | window
 
 IMPORTANT RULES FOR ACCURATE EXTRACTION:
-1. WALL QUANTITY DUPLICATION (Long-Wall / Short-Wall Method):
-   To avoid duplicate corner calculations:
-   - Extract two opposite walls (e.g., North and South) using the OUTER length: e.g. 11.5 ft = 3.505 m.
-   - Extract the other two opposite walls (e.g., East and West) using the INNER length: e.g. 10.0 ft = 3.048 m.
-   - All walls standard height is 10 ft (3.048 m) and thickness is 9 inches (0.2286 m).
+1. DETECTING DRAWING UNIT:
+   - Identify whether the drawing is annotated in feet/inches (e.g. 10', 9", 11'6") or meters/mm.
+   - Set the root-level "detectedUnit" to "ft" (imperial) or "m" (metric).
+   - If the drawing is in feet/inches, all dimensions in the JSON "elements" array must be in FEET (with inches converted to decimal feet, e.g. 9 inches = 0.75 ft, 6 inches = 0.5 ft). Do NOT convert them to meters in the JSON output!
+   - If the drawing is in meters, all dimensions must be in METERS.
 
-2. DOORS & WINDOWS (Openings):
+2. WALL QUANTITY DUPLICATION (Long-Wall / Short-Wall Method):
+   - To avoid duplicate corner calculations:
+     - North and South walls: Use OUTER length (e.g. 11.5 ft or 3.505 m).
+     - East and West walls: Use INNER length (e.g. 10.0 ft or 3.048 m).
+     - Standard walls height is 10 ft (3.048 m) and thickness is 9 inches (0.75 ft or 0.2286 m).
+
+3. DOORS & WINDOWS (Openings):
    - Explicitly detect and extract all doors and windows as "door" or "window" element types.
-   - Set dimensions: Length is the opening width (e.g. Door = 3 ft = 0.914 m, Window = 4 ft = 1.219 m), Height is opening height (e.g. Door = 7 ft = 2.134 m, Window = 4 ft = 1.219 m), Width is wall thickness (9 inches = 0.2286 m).
+   - Set dimensions: Length is the opening width (e.g. Door = 3 ft = 0.914 m, Window = 4 ft = 1.219 m), Height is opening height (e.g. Door = 7 ft = 2.134 m, Window = 4 ft = 1.219 m), Width is wall thickness (9 inches = 0.75 ft or 0.2286 m).
    - Use clear directional labels indicating their wall placement (e.g., "Door (South Wall)", "Window (West Wall)") so they can be deducted from the correct wall.
 
-3. SLAB THICKNESS:
-   - For rooms / slabs, the Length and Width represent the floor plan footprint (e.g., outer dimensions 11.5 ft x 11.5 ft = 3.505 m x 3.505 m).
-   - The slab height represents its actual structural thickness (e.g. 6 inches = 0.15 m), NOT the room height of 10 ft.
-
-4. METRIC CONVERSIONS:
-   - Convert all dimensions in the drawing from imperial to metric:
-     - 1 ft = 0.3048 m
-     - 1 inch = 0.0254 m
-     - 11.5 ft = 3.505 m
-     - 10.0 ft = 3.048 m
-     - 9 inches = 0.2286 m
-     - 4 ft = 1.219 m
-     - 3 ft = 0.914 m
-     - 7 ft = 2.134 m
+4. SLAB THICKNESS:
+   - For slabs, the Length and Width represent the floor plan footprint (e.g., outer dimensions 11.5 ft x 11.5 ft).
+   - The slab height represents its actual structural thickness (e.g. 6 inches = 0.5 ft or 0.15 m), NOT the room height of 10 ft.
 
 Return ONLY the JSON.`;
 
   try {
     const raw  = await callAI(prompt, imageBase64, mimeType);
     const json = extractJSON(raw);
-    let parsed: { elements?: Record<string, unknown>[]; dimensions?: Record<string, unknown>[]; overall_confidence?: number };
+    let parsed: { 
+      elements?: Record<string, unknown>[]; 
+      dimensions?: Record<string, unknown>[]; 
+      overall_confidence?: number;
+      detectedUnit?: string;
+    };
 
     try { parsed = JSON.parse(json); }
     catch { throw new Error('Could not parse AI response. Try a clearer image.'); }
@@ -247,7 +249,17 @@ Return ONLY the JSON.`;
       confidence: (d.confidence as number) || 0.5,
     }));
 
-    return { success: true, elements, dimensions, rawResponse: raw, confidence: parsed.overall_confidence ?? 0.7, retryCount: 0 };
+    const detectedUnit = (parsed.detectedUnit === 'm' || parsed.detectedUnit === 'meters') ? 'm' : 'ft';
+
+    return { 
+      success: true, 
+      elements, 
+      dimensions, 
+      rawResponse: raw, 
+      confidence: parsed.overall_confidence ?? 0.7, 
+      retryCount: 0,
+      detectedUnit
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, elements: [], dimensions: [], rawResponse: msg, confidence: 0, retryCount: 0 };
