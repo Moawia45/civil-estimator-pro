@@ -7,7 +7,7 @@
 import React, { useState } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { StructuralElement, ElementType } from '@/lib/types';
-import { calculateVolume, calculateArea, formatNumber } from '@/lib/calculations';
+import { calculateVolume, calculateArea, formatNumber, feetToMeters } from '@/lib/calculations';
 import { ELEMENT_NAMES } from '@/lib/constants';
 
 function generateId(): string {
@@ -16,11 +16,13 @@ function generateId(): string {
 
 const elementTypes: ElementType[] = [
   'wall', 'slab', 'column', 'beam', 'foundation',
-  'footing', 'staircase', 'lintel', 'plinth', 'parapet'
+  'footing', 'staircase', 'lintel', 'plinth', 'parapet',
+  'door', 'window'
 ];
 
 export default function ManualInputPage() {
   const { project, addElement, removeElement, updateElement } = useProject();
+  const [inputUnit, setInputUnit] = useState<'m' | 'ft'>('m');
   const [formData, setFormData] = useState({
     type: 'wall' as ElementType,
     name: '',
@@ -33,10 +35,17 @@ export default function ManualInputPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const l = parseFloat(formData.length) || 0;
-    const w = parseFloat(formData.width) || 0;
-    const h = parseFloat(formData.height) || 0;
+    let l = parseFloat(formData.length) || 0;
+    let w = parseFloat(formData.width) || 0;
+    let h = parseFloat(formData.height) || 0;
     const qty = parseInt(formData.quantity) || 1;
+
+    // Convert to meters if input is in feet
+    if (inputUnit === 'ft') {
+      l = feetToMeters(l);
+      w = feetToMeters(w);
+      h = feetToMeters(h);
+    }
 
     const element: StructuralElement = {
       id: generateId(),
@@ -49,7 +58,7 @@ export default function ManualInputPage() {
       unit: 'm',
       volume: calculateVolume(l, w, h),
       area: calculateArea(l, w),
-      notes: formData.notes,
+      notes: formData.notes + (inputUnit === 'ft' ? ' (entered in ft)' : ''),
     };
 
     addElement(element);
@@ -85,7 +94,7 @@ export default function ManualInputPage() {
             {/* Element Type Selector */}
             <div className="form-group">
               <label className="form-label">Element Type</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 'var(--space-2)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'var(--space-2)' }}>
                 {elementTypes.map(type => (
                   <button
                     key={type}
@@ -111,10 +120,35 @@ export default function ManualInputPage() {
               />
             </div>
 
+            {/* Input Unit Selection */}
+            <div className="form-group" style={{ marginBottom: 'var(--space-4)' }}>
+              <div className="flex-between" style={{ background: 'var(--bg-secondary)', padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Input Dimensions Unit:</span>
+                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${inputUnit === 'm' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setInputUnit('m')}
+                    style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                  >
+                    Meters (m)
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${inputUnit === 'ft' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setInputUnit('ft')}
+                    style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                  >
+                    Feet (ft)
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* Dimensions */}
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Length (m)</label>
+                <label className="form-label">Length ({inputUnit})</label>
                 <input
                   type="number"
                   step="0.01"
@@ -126,7 +160,7 @@ export default function ManualInputPage() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Width (m)</label>
+                <label className="form-label">Width ({inputUnit})</label>
                 <input
                   type="number"
                   step="0.01"
@@ -138,7 +172,7 @@ export default function ManualInputPage() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Height (m)</label>
+                <label className="form-label">Height ({inputUnit})</label>
                 <input
                   type="number"
                   step="0.01"
@@ -178,25 +212,36 @@ export default function ManualInputPage() {
             {formData.length && formData.width && formData.height && (
               <div className="card" style={{ background: 'var(--accent-gradient-soft)', marginBottom: 'var(--space-4)', padding: 'var(--space-4)' }}>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>
-                  Calculated Preview:
+                  Calculated Preview (in Meters):
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--space-6)' }}>
                   <div>
                     <div className="text-mono" style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-accent)' }}>
-                      {formatNumber(calculateVolume(
-                        parseFloat(formData.length) || 0,
-                        parseFloat(formData.width) || 0,
-                        parseFloat(formData.height) || 0
-                      ) * (parseInt(formData.quantity) || 1))} m³
+                      {(() => {
+                        let l = parseFloat(formData.length) || 0;
+                        let w = parseFloat(formData.width) || 0;
+                        let h = parseFloat(formData.height) || 0;
+                        if (inputUnit === 'ft') {
+                          l = feetToMeters(l);
+                          w = feetToMeters(w);
+                          h = feetToMeters(h);
+                        }
+                        return formatNumber(calculateVolume(l, w, h) * (parseInt(formData.quantity) || 1));
+                      })()} m³
                     </div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>Total Volume</div>
                   </div>
                   <div>
                     <div className="text-mono" style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-accent)' }}>
-                      {formatNumber(calculateArea(
-                        parseFloat(formData.length) || 0,
-                        parseFloat(formData.width) || 0,
-                      ) * (parseInt(formData.quantity) || 1))} m²
+                      {(() => {
+                        let l = parseFloat(formData.length) || 0;
+                        let w = parseFloat(formData.width) || 0;
+                        if (inputUnit === 'ft') {
+                          l = feetToMeters(l);
+                          w = feetToMeters(w);
+                        }
+                        return formatNumber(calculateArea(l, w) * (parseInt(formData.quantity) || 1));
+                      })()} m²
                     </div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>Total Area</div>
                   </div>

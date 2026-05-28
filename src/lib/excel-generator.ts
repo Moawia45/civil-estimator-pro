@@ -3,86 +3,153 @@
 // ============================================
 
 import * as XLSX from 'xlsx';
-import { BOQSection, ReportConfig, MaterialBreakdown } from './types';
+import { BOQSection, ReportConfig, MaterialBreakdown, Material, StructuralElement } from './types';
+import { generateMaterialBreakdown, calculateVolume, calculateArea } from './calculations';
 
 /**
- * Generate and download BOQ as Excel file
+ * Helper to calculate door/window deductions for a wall based on direction match
+ */
+function getLocalWallDeductions(wallName: string, elements: StructuralElement[]) {
+  let areaDeduction = 0;
+  let volumeDeduction = 0;
+  const nameLower = wallName.toLowerCase();
+  
+  let direction = "";
+  if (nameLower.includes("north")) direction = "north";
+  else if (nameLower.includes("south")) direction = "south";
+  else if (nameLower.includes("east")) direction = "east";
+  else if (nameLower.includes("west")) direction = "west";
+  
+  if (!direction) return { area: 0, volume: 0 };
+  
+  elements.forEach(el => {
+    if (el.type === 'door' || el.type === 'window') {
+      const elNameLower = el.name.toLowerCase();
+      if (elNameLower.includes(direction)) {
+        const opArea = el.length * el.height * el.quantity;
+        const opVolume = el.length * el.width * el.height * el.quantity;
+        areaDeduction += opArea;
+        volumeDeduction += opVolume;
+      }
+    }
+  });
+  
+  return { area: areaDeduction, volume: volumeDeduction };
+}
+
+/**
+ * Generate and download BOQ as Excel file with formulas
  */
 export function downloadBOQExcel(
   config: ReportConfig,
   boqSections: BOQSection[],
-  materialBreakdown?: MaterialBreakdown[]
+  materials: Material[],
+  elements: StructuralElement[]
 ): void {
   const wb = XLSX.utils.book_new();
 
-  // ---- Sheet 1: BOQ Summary ----
-  const summaryData: (string | number)[][] = [
-    ['BILL OF QUANTITIES - SUMMARY'],
-    [],
-    ['Project:', config.projectTitle],
-    ['Client:', config.clientName],
-    ['Location:', config.location],
-    ['Date:', config.date],
-    ['Prepared By:', config.preparedBy || 'Moawia Husnain'],
-    ['Currency:', `${config.currency.name} (${config.currency.symbol})`],
-    [],
-    ['Section', 'Description', 'Subtotal'],
-  ];
+  // ---- 1. Build Centralized "MasterRates" Sheet ----
+  const uniqueMaterials = new Map<string, { name: string; rate: number; unit: string }>();
 
-  let grandTotal = 0;
-  boqSections.forEach((section, idx) => {
-    const subtotal = section.items.reduce((sum, item) => sum + item.amount, 0);
-    grandTotal += subtotal;
-    summaryData.push([idx + 1, section.title, subtotal]);
+  // Add all standard materials from project.materials
+  materials.forEach(m => {
+    const convertedRate = m.rate * (config.currency.rate || 1);
+    uniqueMaterials.set(m.name, { name: m.name, rate: convertedRate, unit: m.unit });
   });
 
-  summaryData.push([]);
-  summaryData.push(['', 'GRAND TOTAL', grandTotal]);
+  // Add any manual BOQ items not in materials database
+  boqSections.forEach(section => {
+    section.items.forEach(item => {
+      const key = item.materialName || item.description;
+      if (!uniqueMaterials.has(key)) {
+        uniqueMaterials.set(key, { name: key, rate: item.rate, unit: item.unit });
+      }
+    });
+  });
 
-  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-
-  // Set column widths
-  summarySheet['!cols'] = [
-    { wch: 10 },
+  const masterRatesData: (string | number)[][] = [
+    ['Material / Item Name', 'Rate', 'Unit']
+  ];
+  uniqueMaterials.forEach(m => {
+    masterRatesData.push([m.name, m.rate, m.unit]);
+  });
+  const masterRatesSheet = XLSX.utils.aoa_to_sheet(masterRatesData);
+  masterRatesSheet['!cols'] = [
     { wch: 45 },
-    { wch: 20 },
+    { wch: 15 },
+    { wch: 10 }
   ];
 
-  // Merge title cell
-  summarySheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }];
-
-  XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
-
-  // ---- Sheet 2: Detailed BOQ ----
-  const detailedData: (string | number)[][] = [
+  // ---- 2. Build "Detailed BOQ" Sheet with Formulas ----
+  const detailedData: any[][] = [
     ['DETAILED BILL OF QUANTITIES'],
     [],
     ['S.No', 'Description', 'Unit', 'Quantity', 'Rate', 'Amount'],
   ];
 
+  let currentExcelRow = 3; // header row is row 3
   let itemCounter = 0;
+  const sectionSubtotals: { sectionTitle: string; rowNum: number }[] = [];
+
   boqSections.forEach((section) => {
     // Section header row
     detailedData.push([`--- ${section.title} ---`, '', '', '', '', '']);
+    currentExcelRow++;
+
+    const firstItemRow = currentExcelRow + 1;
 
     section.items.forEach((item) => {
       itemCounter++;
+      currentExcelRow++;
+
+      const key = item.materialName || item.description;
+      const escapedKey = key.replace(/"/g, '""');
+      
+      // XLOOKUP rate from MasterRates, Amount = Qty * Rate
+      const rateFormula = `XLOOKUP("${escapedKey}", MasterRates!A:A, MasterRates!B:B)`;
+      const amountFormula = `D${currentExcelRow}*E${currentExcelRow}`;
+
       detailedData.push([
         itemCounter,
         item.description,
         item.unit,
         item.quantity,
-        item.rate,
-        item.amount,
+        { t: 'n', f: rateFormula, v: item.rate },
+        { t: 'n', f: amountFormula, v: item.amount }
       ]);
     });
 
-    const subtotal = section.items.reduce((sum, item) => sum + item.amount, 0);
-    detailedData.push(['', '', '', '', 'Subtotal:', subtotal]);
+    const lastItemRow = currentExcelRow;
+    currentExcelRow++; // Subtotal row
+
+    const subtotalFormula = firstItemRow <= lastItemRow 
+      ? `SUM(F${firstItemRow}:F${lastItemRow})` 
+      : '0';
+
+    detailedData.push([
+      '', '', '', '', 'Subtotal:',
+      { t: 'n', f: subtotalFormula, v: section.items.reduce((s, i) => s + i.amount, 0) }
+    ]);
+
+    sectionSubtotals.push({
+      sectionTitle: section.title,
+      rowNum: currentExcelRow
+    });
+
     detailedData.push([]);
+    currentExcelRow++;
   });
 
-  detailedData.push(['', '', '', '', 'GRAND TOTAL:', grandTotal]);
+  // GRAND TOTAL row in Detailed BOQ
+  currentExcelRow++;
+  const grandTotalFormula = `SUMIF(E4:E${currentExcelRow - 1}, "Subtotal:", F4:F${currentExcelRow - 1})`;
+  const precalculatedGrandTotal = boqSections.reduce((sum, s) => sum + s.items.reduce((a, i) => a + i.amount, 0), 0);
+
+  detailedData.push([
+    '', '', '', '', 'GRAND TOTAL:',
+    { t: 'n', f: grandTotalFormula, v: precalculatedGrandTotal }
+  ]);
+  const grandTotalDetailedRow = currentExcelRow;
 
   const detailedSheet = XLSX.utils.aoa_to_sheet(detailedData);
   detailedSheet['!cols'] = [
@@ -95,37 +162,136 @@ export function downloadBOQExcel(
   ];
   detailedSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
 
-  XLSX.utils.book_append_sheet(wb, detailedSheet, 'Detailed BOQ');
+  // ---- 3. Build "Summary" Sheet with Formulas ----
+  const summaryData: any[][] = [
+    ['BILL OF QUANTITIES - SUMMARY'],
+    [],
+    ['Project:', config.projectTitle],
+    ['Client:', config.clientName],
+    ['Location:', config.location],
+    ['Date:', config.date],
+    ['Prepared By:', config.preparedBy || 'Moawia Husnain'],
+    ['Currency:', `${config.currency.name} (${config.currency.symbol})`],
+    [],
+    ['Section', 'Description', 'Subtotal'],
+  ];
 
-  // ---- Sheet 3: Material Breakdown ----
-  if (materialBreakdown && materialBreakdown.length > 0) {
-    const matData: (string | number)[][] = [
-      ['MATERIAL BREAKDOWN'],
-      [],
-      ['Material', 'Quantity', 'Unit', 'Rate', 'Total'],
-    ];
+  let summaryExcelRow = 10;
+  sectionSubtotals.forEach((sec, idx) => {
+    summaryExcelRow++;
+    // Reference subtotal cell in Detailed BOQ sheet
+    const subtotalRef = `'Detailed BOQ'!F${sec.rowNum}`;
+    const subtotalVal = boqSections.find(s => s.title === sec.sectionTitle)?.items.reduce((s, i) => s + i.amount, 0) || 0;
 
-    let matTotal = 0;
-    materialBreakdown.forEach((mb) => {
-      matData.push([mb.material, mb.quantity, mb.unit, mb.rate, mb.total]);
-      matTotal += mb.total;
+    summaryData.push([
+      idx + 1,
+      sec.sectionTitle,
+      { t: 'n', f: subtotalRef, v: subtotalVal }
+    ]);
+  });
+
+  summaryData.push([]);
+  summaryExcelRow++;
+
+  summaryData.push([
+    '',
+    'GRAND TOTAL',
+    { t: 'n', f: `'Detailed BOQ'!F${grandTotalDetailedRow}`, v: precalculatedGrandTotal }
+  ]);
+
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+  summarySheet['!cols'] = [
+    { wch: 10 },
+    { wch: 45 },
+    { wch: 20 },
+  ];
+  summarySheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }];
+
+  // ---- 4. Build "Material Breakdown" Sheet with Formulas ----
+  const materialTotals = new Map<string, { quantity: number; unit: string; rate: number }>();
+
+  elements.forEach(el => {
+    let deductions = { area: 0, volume: 0 };
+    if (['wall', 'parapet'].includes(el.type)) {
+      deductions = getLocalWallDeductions(el.name, elements);
+    }
+    
+    const elementBreakdown = generateMaterialBreakdown(
+      el.type, 
+      el.length, 
+      el.width, 
+      el.height, 
+      el.quantity, 
+      'M20', 
+      deductions
+    );
+    
+    elementBreakdown.forEach(mb => {
+      const mat = materials.find(m => m.name.toLowerCase() === mb.material.toLowerCase() || 
+                                      mb.material.toLowerCase().includes(m.name.toLowerCase()) || 
+                                      m.name.toLowerCase().includes(mb.material.toLowerCase()));
+      const matName = mat ? mat.name : mb.material;
+      const matUnit = mat ? mat.unit : mb.unit;
+      const matRate = mat ? mat.rate * (config.currency.rate || 1) : mb.rate;
+      
+      const existing = materialTotals.get(matName);
+      if (existing) {
+        existing.quantity += mb.quantity;
+      } else {
+        materialTotals.set(matName, { quantity: mb.quantity, unit: matUnit, rate: matRate });
+      }
     });
+  });
 
-    matData.push([]);
-    matData.push(['', '', '', 'TOTAL:', matTotal]);
+  const matData: any[][] = [
+    ['MATERIAL BREAKDOWN'],
+    [],
+    ['Material', 'Quantity', 'Unit', 'Rate', 'Total'],
+  ];
 
-    const matSheet = XLSX.utils.aoa_to_sheet(matData);
-    matSheet['!cols'] = [
-      { wch: 30 },
-      { wch: 15 },
-      { wch: 10 },
-      { wch: 15 },
-      { wch: 18 },
-    ];
-    matSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+  let matExcelRow = 3;
+  let matGrandTotal = 0;
+  
+  materialTotals.forEach((val, key) => {
+    matExcelRow++;
+    const escapedKey = key.replace(/"/g, '""');
+    const rateFormula = `XLOOKUP("${escapedKey}", MasterRates!A:A, MasterRates!B:B)`;
+    const totalFormula = `B${matExcelRow}*D${matExcelRow}`;
+    const totalVal = val.quantity * val.rate;
+    matGrandTotal += totalVal;
 
-    XLSX.utils.book_append_sheet(wb, matSheet, 'Material Breakdown');
-  }
+    matData.push([
+      key,
+      parseFloat(val.quantity.toFixed(3)),
+      val.unit,
+      { t: 'n', f: rateFormula, v: val.rate },
+      { t: 'n', f: totalFormula, v: totalVal }
+    ]);
+  });
+
+  matData.push([]);
+  matExcelRow++;
+
+  matData.push([
+    '', '', '', 'TOTAL:',
+    { t: 'n', f: `SUM(E4:E${matExcelRow - 1})`, v: matGrandTotal }
+  ]);
+
+  const matSheet = XLSX.utils.aoa_to_sheet(matData);
+  matSheet['!cols'] = [
+    { wch: 30 },
+    { wch: 15 },
+    { wch: 10 },
+    { wch: 15 },
+    { wch: 18 },
+  ];
+  matSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+
+  // ---- Append all sheets to Workbook ----
+  XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+  XLSX.utils.book_append_sheet(wb, detailedSheet, 'Detailed BOQ');
+  XLSX.utils.book_append_sheet(wb, masterRatesSheet, 'MasterRates');
+  XLSX.utils.book_append_sheet(wb, matSheet, 'Material Breakdown');
 
   // ---- Download ----
   const fileName = `BOQ_${config.projectTitle.replace(/\s+/g, '_')}_${config.date}.xlsx`;

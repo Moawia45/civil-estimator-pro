@@ -116,6 +116,8 @@ export const ELEMENT_NAMES: Record<string, string> = {
   lintel: 'Lintel',
   plinth: 'Plinth Beam',
   parapet: 'Parapet Wall',
+  door: 'Door',
+  window: 'Window',
 };
 
 // ---- BOQ Categories ----

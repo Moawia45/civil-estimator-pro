@@ -251,7 +251,8 @@ export function generateMaterialBreakdown(
   width: number,
   height: number,
   quantity: number = 1,
-  concreteGrade: ConcreteGrade = 'M20'
+  concreteGrade: ConcreteGrade = 'M20',
+  deductions: { area: number; volume: number } = { area: 0, volume: 0 }
 ): MaterialBreakdown[] {
   const breakdown: MaterialBreakdown[] = [];
   const vol = calculateVolume(length, width, height) * quantity;
@@ -284,7 +285,10 @@ export function generateMaterialBreakdown(
 
   // Brickwork
   if (['wall', 'parapet'].includes(elementType)) {
-    const wallArea = length * height * quantity;
+    const grossWallArea = length * height * quantity;
+    const wallArea = Math.max(0, grossWallArea - deductions.area);
+    const wallVol = Math.max(0, vol - deductions.volume);
+
     const bw = calculateBrickwork(wallArea, width > 0.15 ? 9 : 4.5);
     breakdown.push(
       { material: 'Bricks', quantity: bw.bricks, unit: 'nos', rate: 0, total: 0 },
@@ -298,6 +302,20 @@ export function generateMaterialBreakdown(
     breakdown.push(
       { material: 'Plaster Cement', quantity: pl.cementBags, unit: 'bags', rate: 0, total: 0 },
       { material: 'Plaster Sand', quantity: pl.sandM3, unit: 'm³', rate: 0, total: 0 },
+    );
+  }
+
+  // Woodwork & Openings
+  if (elementType === 'door') {
+    breakdown.push(
+      { material: 'Flush Door (Standard)', quantity: quantity, unit: 'nos', rate: 0, total: 0 },
+      { material: 'Enamel Paint', quantity: parseFloat((length * height * 2 * quantity).toFixed(2)), unit: 'm²', rate: 0, total: 0 }
+    );
+  }
+
+  if (elementType === 'window') {
+    breakdown.push(
+      { material: 'Wooden Window', quantity: quantity, unit: 'nos', rate: 0, total: 0 }
     );
   }
 
@@ -319,4 +337,29 @@ export function formatNumber(num: number, decimals: number = 2): string {
  */
 export function formatCurrency(amount: number, symbol: string = '$', decimals: number = 2): string {
   return `${symbol}${formatNumber(amount, decimals)}`;
+}
+
+// ---- Unit Conversions ----
+export function feetToMeters(feet: number): number {
+  return parseFloat((feet * 0.3048).toFixed(4));
+}
+
+export function metersToFeet(meters: number): number {
+  return parseFloat((meters / 0.3048).toFixed(4));
+}
+
+export function cubicMetersToCubicFeet(m3: number): number {
+  return parseFloat((m3 * 35.3147).toFixed(4));
+}
+
+export function cubicFeetToCubicMeters(cft: number): number {
+  return parseFloat((cft / 35.3147).toFixed(4));
+}
+
+export function squareMetersToSquareFeet(m2: number): number {
+  return parseFloat((m2 * 10.7639).toFixed(4));
+}
+
+export function squareFeetToSquareMeters(sqft: number): number {
+  return parseFloat((sqft / 10.7639).toFixed(4));
 }

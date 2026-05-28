@@ -23,7 +23,9 @@ export type ElementType =
   | 'staircase'
   | 'lintel'
   | 'plinth'
-  | 'parapet';
+  | 'parapet'
+  | 'door'
+  | 'window';
 
 export interface StructuralElement {
   id: string;
@@ -89,6 +91,8 @@ export interface BOQItem {
   rate: number;
   amount: number;
   notes?: string;
+  materialId?: string;
+  materialName?: string;
 }
 
 export interface BOQSection {

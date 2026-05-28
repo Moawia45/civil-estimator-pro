@@ -89,4 +89,18 @@ export const DEFAULT_MATERIALS: Material[] = [
   { id: 'misc-curing', name: 'Curing (Water Curing)', category: 'miscellaneous', unit: 'm2', rate: 1.50, description: 'Water curing for concrete/plaster' },
   { id: 'misc-dpc', name: 'DPC (Damp Proof Course)', category: 'miscellaneous', unit: 'm2', rate: 10.00, description: 'Damp proof course with bitumen' },
   { id: 'misc-antitermite', name: 'Anti-Termite Treatment', category: 'miscellaneous', unit: 'm2', rate: 3.00, description: 'Chemical anti-termite treatment' },
+
+  // ---- Raw Materials (for breakdown lookup) ----
+  { id: 'raw-cement', name: 'Cement', category: 'miscellaneous', unit: 'bags', rate: 8.00, description: 'OPC / PPC Cement bag (50kg)' },
+  { id: 'raw-sand', name: 'Sand (Fine Agg.)', category: 'miscellaneous', unit: 'm3', rate: 25.00, description: 'Fine aggregate sand' },
+  { id: 'raw-aggregate', name: 'Coarse Aggregate', category: 'miscellaneous', unit: 'm3', rate: 30.00, description: 'Crushed stone aggregate' },
+  { id: 'raw-water', name: 'Water', category: 'miscellaneous', unit: 'liters', rate: 0.002, description: 'Construction water' },
+  { id: 'raw-binding-wire', name: 'Binding Wire', category: 'steel', unit: 'kg', rate: 1.50, description: 'Binding wire' },
+  { id: 'raw-bricks', name: 'Bricks', category: 'brickwork', unit: 'nos', rate: 0.12, description: 'Red clay bricks' },
+  { id: 'raw-mortar-cement', name: 'Cement (Mortar)', category: 'brickwork', unit: 'bags', rate: 8.00, description: 'OPC Cement for mortar' },
+  { id: 'raw-mortar-sand', name: 'Sand (Mortar)', category: 'brickwork', unit: 'm3', rate: 25.00, description: 'Mortar sand' },
+  { id: 'raw-plaster-cement', name: 'Plaster Cement', category: 'plaster', unit: 'bags', rate: 8.00, description: 'Cement for plastering' },
+  { id: 'raw-plaster-sand', name: 'Plaster Sand', category: 'plaster', unit: 'm3', rate: 25.00, description: 'Fine sand for plastering' },
+  { id: 'raw-steel', name: 'Steel Reinforcement', category: 'steel', unit: 'kg', rate: 0.95, description: 'Reinforcement steel' },
+  { id: 'raw-formwork', name: 'Formwork', category: 'formwork', unit: 'm2', rate: 15.00, description: 'Formwork plywood' },
 ];

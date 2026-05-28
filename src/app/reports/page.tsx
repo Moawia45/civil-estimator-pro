@@ -51,7 +51,7 @@ export default function ReportsPage() {
     setExporting('excel');
     try {
       await new Promise(r => setTimeout(r, 500));
-      downloadBOQExcel(reportConfig, project.boqSections);
+      downloadBOQExcel(reportConfig, project.boqSections, project.materials, project.elements);
     } catch (err) {
       console.error('Excel export error:', err);
       alert('Error generating Excel. Please try again.');

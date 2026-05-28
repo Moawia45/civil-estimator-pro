@@ -175,7 +175,7 @@ export async function analyzeDrawing(
   mimeType = 'image/jpeg'
 ): Promise<AIAnalysisResult> {
   const prompt = `You are an expert Civil Engineer and Quantity Surveyor.
-Analyze this construction floor plan drawing carefully and extract ALL structural elements.
+Analyze this construction floor plan drawing carefully and extract ALL structural elements (walls, slab, door openings, window openings).
 
 Return ONLY a valid JSON object — no markdown, no explanation:
 {
@@ -183,25 +183,44 @@ Return ONLY a valid JSON object — no markdown, no explanation:
     {
       "type": "wall",
       "label": "External Wall North",
-      "dimensions": { "length": 7.62, "width": 0.23, "height": 3.0 },
+      "dimensions": { "length": 3.505, "width": 0.2286, "height": 3.048 },
       "confidence": 0.9
     }
   ],
   "dimensions": [
-    { "label": "Building Width", "value": 7.62, "unit": "m", "confidence": 0.95 }
+    { "label": "Outer Length", "value": 3.505, "unit": "m", "confidence": 0.95 }
   ],
   "overall_confidence": 0.85
 }
 
-Element type must be one of: wall | slab | column | beam | foundation | footing | staircase | lintel | plinth | parapet
+Element type must be one of: wall | slab | column | beam | foundation | footing | staircase | lintel | plinth | parapet | door | window
 
-Dimension conversion:
-- 1 ft = 0.3048 m, 1 inch = 0.0254 m
-- 25' = 7.62 m, 40' = 12.19 m
-- "6'-0\\"x5'-0\\"" → L=1.83, W=1.524
-- Rooms → type "slab" with floor dimensions, height=3.0m
-- Walls → width=0.23m (9" brick) or 0.115m (4.5" brick)
-- Extract EVERY room, wall, staircase visible in the drawing.
+IMPORTANT RULES FOR ACCURATE EXTRACTION:
+1. WALL QUANTITY DUPLICATION (Long-Wall / Short-Wall Method):
+   To avoid duplicate corner calculations:
+   - Extract two opposite walls (e.g., North and South) using the OUTER length: e.g. 11.5 ft = 3.505 m.
+   - Extract the other two opposite walls (e.g., East and West) using the INNER length: e.g. 10.0 ft = 3.048 m.
+   - All walls standard height is 10 ft (3.048 m) and thickness is 9 inches (0.2286 m).
+
+2. DOORS & WINDOWS (Openings):
+   - Explicitly detect and extract all doors and windows as "door" or "window" element types.
+   - Set dimensions: Length is the opening width (e.g. Door = 3 ft = 0.914 m, Window = 4 ft = 1.219 m), Height is opening height (e.g. Door = 7 ft = 2.134 m, Window = 4 ft = 1.219 m), Width is wall thickness (9 inches = 0.2286 m).
+   - Use clear directional labels indicating their wall placement (e.g., "Door (South Wall)", "Window (West Wall)") so they can be deducted from the correct wall.
+
+3. SLAB THICKNESS:
+   - For rooms / slabs, the Length and Width represent the floor plan footprint (e.g., outer dimensions 11.5 ft x 11.5 ft = 3.505 m x 3.505 m).
+   - The slab height represents its actual structural thickness (e.g. 6 inches = 0.15 m), NOT the room height of 10 ft.
+
+4. METRIC CONVERSIONS:
+   - Convert all dimensions in the drawing from imperial to metric:
+     - 1 ft = 0.3048 m
+     - 1 inch = 0.0254 m
+     - 11.5 ft = 3.505 m
+     - 10.0 ft = 3.048 m
+     - 9 inches = 0.2286 m
+     - 4 ft = 1.219 m
+     - 3 ft = 0.914 m
+     - 7 ft = 2.134 m
 
 Return ONLY the JSON.`;
 

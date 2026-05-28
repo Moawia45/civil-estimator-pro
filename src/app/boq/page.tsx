@@ -71,6 +71,35 @@ export default function BOQPage() {
       return;
     }
 
+    // Helper to calculate door/window deductions for a wall based on direction match
+    const getWallDeductions = (wallName: string) => {
+      let areaDeduction = 0;
+      let volumeDeduction = 0;
+      const nameLower = wallName.toLowerCase();
+      
+      let direction = "";
+      if (nameLower.includes("north")) direction = "north";
+      else if (nameLower.includes("south")) direction = "south";
+      else if (nameLower.includes("east")) direction = "east";
+      else if (nameLower.includes("west")) direction = "west";
+      
+      if (!direction) return { area: 0, volume: 0 };
+      
+      project.elements.forEach(el => {
+        if (el.type === 'door' || el.type === 'window') {
+          const elNameLower = el.name.toLowerCase();
+          if (elNameLower.includes(direction)) {
+            const opArea = el.length * el.height * el.quantity;
+            const opVolume = el.length * el.width * el.height * el.quantity;
+            areaDeduction += opArea;
+            volumeDeduction += opVolume;
+          }
+        }
+      });
+      
+      return { area: areaDeduction, volume: volumeDeduction };
+    };
+
     // Group elements by type
     const groups = new Map<string, typeof project.elements>();
     project.elements.forEach(el => {
@@ -103,6 +132,7 @@ export default function BOQPage() {
 
         if (['slab', 'beam', 'column', 'foundation', 'footing', 'lintel', 'staircase', 'plinth'].includes(type)) {
           // Concrete work
+          const matConc = project.materials.find(m => m.name.toLowerCase().includes('rcc m20'));
           section.items.push({
             id: generateId(),
             sno: section.items.length + 1,
@@ -112,10 +142,13 @@ export default function BOQPage() {
             quantity: parseFloat(vol.toFixed(3)),
             rate: findRate('RCC M20'),
             amount: parseFloat((vol * findRate('RCC M20')).toFixed(2)),
+            materialId: matConc?.id,
+            materialName: matConc?.name,
           });
 
           // Steel
           const steelKg = vol * 78.5; // ~1% steel ratio simplified
+          const matSteel = project.materials.find(m => m.name.toLowerCase().includes('tmt'));
           section.items.push({
             id: generateId(),
             sno: section.items.length + 1,
@@ -125,6 +158,8 @@ export default function BOQPage() {
             quantity: parseFloat(steelKg.toFixed(2)),
             rate: findRate('TMT'),
             amount: parseFloat((steelKg * findRate('TMT')).toFixed(2)),
+            materialId: matSteel?.id,
+            materialName: matSteel?.name,
           });
 
           // Formwork
@@ -134,6 +169,7 @@ export default function BOQPage() {
           else if (type === 'beam') formArea = (2 * el.height + el.width) * el.length * el.quantity;
           else formArea = area;
 
+          const matForm = project.materials.find(m => m.name.toLowerCase().includes('plywood formwork'));
           section.items.push({
             id: generateId(),
             sno: section.items.length + 1,
@@ -143,28 +179,39 @@ export default function BOQPage() {
             quantity: parseFloat(formArea.toFixed(2)),
             rate: findRate('Plywood Formwork'),
             amount: parseFloat((formArea * findRate('Plywood Formwork')).toFixed(2)),
+            materialId: matForm?.id,
+            materialName: matForm?.name,
           });
         }
 
         if (['wall', 'parapet'].includes(type)) {
-          // Brickwork
-          const wallArea = el.length * el.height * el.quantity;
+          // Brickwork with opening deduction
+          const deductions = getWallDeductions(el.name);
+          const wallArea = Math.max(0, el.length * el.height * el.quantity - deductions.area);
+          const wallVol = Math.max(0, vol - deductions.volume);
+
+          const matKey = el.width > 0.15 ? 'brickwork in cement mortar (9")' : 'brickwork in cement mortar (4.5")';
+          const matBrick = project.materials.find(m => m.name.toLowerCase().includes(matKey));
+
           section.items.push({
             id: generateId(),
             sno: section.items.length + 1,
             category: sectionTitle,
             description: `Brickwork for ${el.name} (${el.width > 0.15 ? '9"' : '4.5"'})`,
             unit: el.width > 0.15 ? 'm³' : 'm²',
-            quantity: el.width > 0.15 ? parseFloat(vol.toFixed(3)) : parseFloat(wallArea.toFixed(2)),
+            quantity: el.width > 0.15 ? parseFloat(wallVol.toFixed(3)) : parseFloat(wallArea.toFixed(2)),
             rate: findRate(el.width > 0.15 ? 'Brickwork in Cement Mortar (9")' : 'Brickwork in Cement Mortar (4.5")'),
             amount: 0,
+            materialId: matBrick?.id,
+            materialName: matBrick?.name,
           });
 
           // Set amount
           const lastItem = section.items[section.items.length - 1];
           lastItem.amount = parseFloat((lastItem.quantity * lastItem.rate).toFixed(2));
 
-          // Plaster both sides
+          // Plaster both sides with opening deduction
+          const matPlaster = project.materials.find(m => m.name.toLowerCase().includes('cement plaster 12mm'));
           section.items.push({
             id: generateId(),
             sno: section.items.length + 1,
@@ -174,6 +221,55 @@ export default function BOQPage() {
             quantity: parseFloat((wallArea * 2).toFixed(2)),
             rate: findRate('Cement Plaster 12mm'),
             amount: parseFloat((wallArea * 2 * findRate('Cement Plaster 12mm')).toFixed(2)),
+            materialId: matPlaster?.id,
+            materialName: matPlaster?.name,
+          });
+        }
+
+        if (type === 'door') {
+          const matDoor = project.materials.find(m => m.name.toLowerCase().includes('flush door'));
+          section.items.push({
+            id: generateId(),
+            sno: section.items.length + 1,
+            category: sectionTitle,
+            description: `Flush Door (Standard) for ${el.name}`,
+            unit: 'nos',
+            quantity: el.quantity,
+            rate: findRate('Flush Door'),
+            amount: parseFloat((el.quantity * findRate('Flush Door')).toFixed(2)),
+            materialId: matDoor?.id,
+            materialName: matDoor?.name,
+          });
+
+          const matPaint = project.materials.find(m => m.name.toLowerCase().includes('enamel paint'));
+          const paintArea = el.length * el.height * 2 * el.quantity;
+          section.items.push({
+            id: generateId(),
+            sno: section.items.length + 1,
+            category: sectionTitle,
+            description: `Enamel Paint for ${el.name} (Both sides)`,
+            unit: 'm²',
+            quantity: parseFloat(paintArea.toFixed(2)),
+            rate: findRate('Enamel Paint'),
+            amount: parseFloat((paintArea * findRate('Enamel Paint')).toFixed(2)),
+            materialId: matPaint?.id,
+            materialName: matPaint?.name,
+          });
+        }
+
+        if (type === 'window') {
+          const matWin = project.materials.find(m => m.name.toLowerCase().includes('wooden window'));
+          section.items.push({
+            id: generateId(),
+            sno: section.items.length + 1,
+            category: sectionTitle,
+            description: `Wooden Window for ${el.name}`,
+            unit: 'nos',
+            quantity: el.quantity,
+            rate: findRate('Wooden Window'),
+            amount: parseFloat((el.quantity * findRate('Wooden Window')).toFixed(2)),
+            materialId: matWin?.id,
+            materialName: matWin?.name,
           });
         }
       });
