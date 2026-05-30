@@ -39,6 +39,7 @@ export interface StructuralElement {
   volume: number;
   area: number;
   notes?: string;
+  confidence?: number;
 }
 
 // ---- Material ----

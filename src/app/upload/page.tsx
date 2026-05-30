@@ -127,6 +127,7 @@ export default function UploadDrawingPage() {
         volume: calculateVolume(lengthM, widthM, heightM),
         area: calculateArea(lengthM, widthM),
         notes: `AI detected (${drawingUnit === 'ft' ? 'Imperial converted to Metric' : 'Metric'}). confidence: ${(el.confidence * 100).toFixed(0)}%`,
+        confidence: el.confidence,
       };
       addElement(element);
     });

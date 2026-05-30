@@ -59,6 +59,7 @@ export default function ManualInputPage() {
       volume: calculateVolume(l, w, h),
       area: calculateArea(l, w),
       notes: formData.notes + (inputUnit === 'ft' ? ' (entered in ft)' : ''),
+      confidence: 1.0,
     };
 
     addElement(element);
@@ -300,6 +301,7 @@ export default function ManualInputPage() {
                       <th>H (m)</th>
                       <th>Qty</th>
                       <th>Volume (m³)</th>
+                      <th>Confidence</th>
                       <th className="col-action"></th>
                     </tr>
                   </thead>
@@ -327,6 +329,9 @@ export default function ManualInputPage() {
                         </td>
                         <td className="col-number text-accent font-bold">
                           {formatNumber(el.volume * el.quantity)}
+                        </td>
+                        <td>
+                          {el.confidence !== undefined ? `${(el.confidence * 100).toFixed(0)}%` : '100%'}
                         </td>
                         <td className="col-action">
                           <button

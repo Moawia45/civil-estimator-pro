@@ -258,62 +258,164 @@ export function generateMaterialBreakdown(
   const vol = calculateVolume(length, width, height) * quantity;
   const area = calculateArea(length, width) * quantity;
 
-  // Concrete
-  if (['slab', 'beam', 'column', 'foundation', 'footing', 'lintel', 'staircase', 'plinth'].includes(elementType)) {
-    const conc = calculateConcrete(vol, concreteGrade);
+  // 1. Footings & Foundations (Full foundation takeoff)
+  if (elementType === 'footing' || elementType === 'foundation') {
+    // Excavation depth 1.2m
+    const excVol = length * width * 1.2 * quantity;
+    breakdown.push({ material: 'Excavation in Earth (Manual)', quantity: parseFloat(excVol.toFixed(3)), unit: 'm³', rate: 0, total: 0 });
+
+    // PCC Bedding 100mm thick (PCC M10)
+    const pccVol = length * width * 0.1 * quantity;
+    const pccConc = calculateConcrete(pccVol, 'M10');
     breakdown.push(
-      { material: `Concrete ${concreteGrade}`, quantity: vol, unit: 'm³', rate: 0, total: 0 },
-      { material: 'Cement', quantity: conc.cement_bags, unit: 'bags', rate: 0, total: 0 },
-      { material: 'Sand (Fine Agg.)', quantity: conc.sand_m3, unit: 'm³', rate: 0, total: 0 },
-      { material: 'Coarse Aggregate', quantity: conc.aggregate_m3, unit: 'm³', rate: 0, total: 0 },
-      { material: 'Water', quantity: conc.water_liters, unit: 'liters', rate: 0, total: 0 },
+      { material: 'PCC M10 (1:3:6)', quantity: parseFloat(pccVol.toFixed(3)), unit: 'm³', rate: 0, total: 0 },
+      { material: 'Cement', quantity: pccConc.cement_bags, unit: 'bags', rate: 0, total: 0 },
+      { material: 'Sand (Fine Agg.)', quantity: pccConc.sand_m3, unit: 'm³', rate: 0, total: 0 },
+      { material: 'Coarse Aggregate', quantity: pccConc.aggregate_m3, unit: 'm³', rate: 0, total: 0 }
     );
 
-    // Steel
-    const steel = calculateSteel(vol, elementType);
+    // RCC Footing concrete (RCC M20)
+    const rccVol = vol; // matching the height of footing
+    const rccConc = calculateConcrete(rccVol, concreteGrade);
+    const steel = calculateSteel(rccVol, 'footing');
+    const form = calculateFormwork('footing', length, width, height);
+
     breakdown.push(
+      { material: 'RCC M20 (1:1.5:3)', quantity: parseFloat(rccVol.toFixed(3)), unit: 'm³', rate: 0, total: 0 },
+      { material: 'Cement', quantity: rccConc.cement_bags, unit: 'bags', rate: 0, total: 0 },
+      { material: 'Sand (Fine Agg.)', quantity: rccConc.sand_m3, unit: 'm³', rate: 0, total: 0 },
+      { material: 'Coarse Aggregate', quantity: rccConc.aggregate_m3, unit: 'm³', rate: 0, total: 0 },
       { material: 'Steel Reinforcement', quantity: steel.weight_kg, unit: 'kg', rate: 0, total: 0 },
       { material: 'Binding Wire', quantity: parseFloat((steel.weight_kg * 0.01).toFixed(2)), unit: 'kg', rate: 0, total: 0 },
+      { material: 'Plywood Formwork', quantity: parseFloat((form.area * quantity).toFixed(2)), unit: 'm²', rate: 0, total: 0 }
     );
 
-    // Formwork
-    const form = calculateFormwork(elementType, length, width, height);
+    // Foundation Masonry (brickwork below ground 0.9m)
+    const brickVol = length * width * 0.9 * quantity;
+    const bw = calculateBrickwork(length * 0.9 * quantity, 9); // simplified as length * 0.9 wall area
     breakdown.push(
-      { material: 'Formwork', quantity: form.area * quantity, unit: 'm²', rate: 0, total: 0 },
+      { material: 'Brickwork in Cement Mortar (9")', quantity: parseFloat(brickVol.toFixed(3)), unit: 'm³', rate: 0, total: 0 },
+      { material: 'Bricks', quantity: bw.bricks, unit: 'nos', rate: 0, total: 0 },
+      { material: 'Cement', quantity: bw.cement_bags, unit: 'bags', rate: 0, total: 0 },
+      { material: 'Sand (Fine Agg.)', quantity: bw.sand_m3, unit: 'm³', rate: 0, total: 0 }
     );
+
+    // DPC Damp Proof Course
+    const dpcArea = length * width * quantity;
+    breakdown.push({ material: 'DPC (Damp Proof Course)', quantity: parseFloat(dpcArea.toFixed(2)), unit: 'm²', rate: 0, total: 0 });
+
+    // Sand Filling (plinth filling 0.6m depth)
+    const sandFillVol = length * width * 0.6 * quantity;
+    breakdown.push({ material: 'Sand Filling', quantity: parseFloat(sandFillVol.toFixed(3)), unit: 'm³', rate: 0, total: 0 });
   }
 
-  // Brickwork
-  if (['wall', 'parapet'].includes(elementType)) {
+  // 2. Slab (Floor & Roof takeoffs combined)
+  else if (elementType === 'slab') {
+    // Floor: PCC bedding 100mm (PCC M10)
+    const pccVol = length * width * 0.1 * quantity;
+    const pccConc = calculateConcrete(pccVol, 'M10');
+    breakdown.push(
+      { material: 'PCC M10 (1:3:6)', quantity: parseFloat(pccVol.toFixed(3)), unit: 'm³', rate: 0, total: 0 },
+      { material: 'Cement', quantity: pccConc.cement_bags, unit: 'bags', rate: 0, total: 0 },
+      { material: 'Sand (Fine Agg.)', quantity: pccConc.sand_m3, unit: 'm³', rate: 0, total: 0 },
+      { material: 'Coarse Aggregate', quantity: pccConc.aggregate_m3, unit: 'm³', rate: 0, total: 0 }
+    );
+
+    // Floor: Cement Screed bed (50mm thick)
+    const screedVol = length * width * 0.05 * quantity;
+    const screedConc = calculateConcrete(screedVol, 'M15'); // matching PCC M15 cement/sand
+    breakdown.push(
+      { material: 'Cement', quantity: screedConc.cement_bags, unit: 'bags', rate: 0, total: 0 },
+      { material: 'Sand (Fine Agg.)', quantity: screedConc.sand_m3, unit: 'm³', rate: 0, total: 0 }
+    );
+
+    // Floor: Tiling
+    const tileArea = area;
+    breakdown.push({ material: 'Floor Tiles (Standard)', quantity: parseFloat(tileArea.toFixed(2)), unit: 'm²', rate: 0, total: 0 });
+
+    // Roof: RCC Slab Concrete (RCC M20)
+    const rccVol = vol; // length * width * height
+    const rccConc = calculateConcrete(rccVol, concreteGrade);
+    const steel = calculateSteel(rccVol, 'slab');
+    const form = calculateFormwork('slab', length, width, height);
+
+    breakdown.push(
+      { material: 'RCC M20 (1:1.5:3)', quantity: parseFloat(rccVol.toFixed(3)), unit: 'm³', rate: 0, total: 0 },
+      { material: 'Cement', quantity: rccConc.cement_bags, unit: 'bags', rate: 0, total: 0 },
+      { material: 'Sand (Fine Agg.)', quantity: rccConc.sand_m3, unit: 'm³', rate: 0, total: 0 },
+      { material: 'Coarse Aggregate', quantity: rccConc.aggregate_m3, unit: 'm³', rate: 0, total: 0 },
+      { material: 'Steel Reinforcement', quantity: steel.weight_kg, unit: 'kg', rate: 0, total: 0 },
+      { material: 'Binding Wire', quantity: parseFloat((steel.weight_kg * 0.01).toFixed(2)), unit: 'kg', rate: 0, total: 0 },
+      { material: 'Plywood Formwork', quantity: parseFloat((form.area * quantity).toFixed(2)), unit: 'm²', rate: 0, total: 0 }
+    );
+
+    // Roof Plaster / Ceiling plaster (12mm)
+    const plasterArea = area;
+    const pl = calculatePlaster(plasterArea, 12);
+    breakdown.push(
+      { material: 'Cement Plaster 12mm (1:6)', quantity: parseFloat(plasterArea.toFixed(2)), unit: 'm²', rate: 0, total: 0 },
+      { material: 'Cement', quantity: pl.cementBags, unit: 'bags', rate: 0, total: 0 },
+      { material: 'Sand (Fine Agg.)', quantity: pl.sandM3, unit: 'm³', rate: 0, total: 0 }
+    );
+
+    // Roof Waterproofing
+    breakdown.push({ material: 'Bituminous Waterproofing', quantity: parseFloat(area.toFixed(2)), unit: 'm²', rate: 0, total: 0 });
+  }
+
+  // 3. Walls & Parapets
+  else if (['wall', 'parapet'].includes(elementType)) {
     const grossWallArea = length * height * quantity;
     const wallArea = Math.max(0, grossWallArea - deductions.area);
     const wallVol = Math.max(0, vol - deductions.volume);
 
-    const bw = calculateBrickwork(wallArea, width > 0.15 ? 9 : 4.5);
+    const is9Inch = width > 0.15;
+    const bwKey = is9Inch ? 'Brickwork in Cement Mortar (9")' : 'Brickwork in Cement Mortar (4.5")';
+    const bw = calculateBrickwork(wallArea, is9Inch ? 9 : 4.5);
+
     breakdown.push(
+      { material: bwKey, quantity: is9Inch ? parseFloat(wallVol.toFixed(3)) : parseFloat(wallArea.toFixed(2)), unit: is9Inch ? 'm³' : 'm²', rate: 0, total: 0 },
       { material: 'Bricks', quantity: bw.bricks, unit: 'nos', rate: 0, total: 0 },
-      { material: 'Cement (Mortar)', quantity: bw.cement_bags, unit: 'bags', rate: 0, total: 0 },
-      { material: 'Sand (Mortar)', quantity: bw.sand_m3, unit: 'm³', rate: 0, total: 0 },
+      { material: 'Cement', quantity: bw.cement_bags, unit: 'bags', rate: 0, total: 0 },
+      { material: 'Sand (Fine Agg.)', quantity: bw.sand_m3, unit: 'm³', rate: 0, total: 0 }
     );
 
-    // Plaster on both sides
-    const plastered = wallArea * 2;
-    const pl = calculatePlaster(plastered, 12);
+    // Plaster both sides
+    const plasterArea = wallArea * 2;
+    const pl = calculatePlaster(plasterArea, 12);
     breakdown.push(
-      { material: 'Plaster Cement', quantity: pl.cementBags, unit: 'bags', rate: 0, total: 0 },
-      { material: 'Plaster Sand', quantity: pl.sandM3, unit: 'm³', rate: 0, total: 0 },
+      { material: 'Cement Plaster 12mm (1:6)', quantity: parseFloat(plasterArea.toFixed(2)), unit: 'm²', rate: 0, total: 0 },
+      { material: 'Cement', quantity: pl.cementBags, unit: 'bags', rate: 0, total: 0 },
+      { material: 'Sand (Fine Agg.)', quantity: pl.sandM3, unit: 'm³', rate: 0, total: 0 }
     );
   }
 
-  // Woodwork & Openings
-  if (elementType === 'door') {
+  // 4. Other Concrete Elements (beams, columns, lintels, staircase, plinth)
+  else if (['beam', 'column', 'lintel', 'staircase', 'plinth'].includes(elementType)) {
+    const rccConc = calculateConcrete(vol, concreteGrade);
+    const steel = calculateSteel(vol, elementType);
+    const form = calculateFormwork(elementType, length, width, height);
+
+    breakdown.push(
+      { material: 'RCC M20 (1:1.5:3)', quantity: parseFloat(vol.toFixed(3)), unit: 'm³', rate: 0, total: 0 },
+      { material: 'Cement', quantity: rccConc.cement_bags, unit: 'bags', rate: 0, total: 0 },
+      { material: 'Sand (Fine Agg.)', quantity: rccConc.sand_m3, unit: 'm³', rate: 0, total: 0 },
+      { material: 'Coarse Aggregate', quantity: rccConc.aggregate_m3, unit: 'm³', rate: 0, total: 0 },
+      { material: 'Steel Reinforcement', quantity: steel.weight_kg, unit: 'kg', rate: 0, total: 0 },
+      { material: 'Binding Wire', quantity: parseFloat((steel.weight_kg * 0.01).toFixed(2)), unit: 'kg', rate: 0, total: 0 },
+      { material: 'Plywood Formwork', quantity: parseFloat((form.area * quantity).toFixed(2)), unit: 'm²', rate: 0, total: 0 }
+    );
+  }
+
+  // 5. Doors
+  else if (elementType === 'door') {
     breakdown.push(
       { material: 'Flush Door (Standard)', quantity: quantity, unit: 'nos', rate: 0, total: 0 },
       { material: 'Enamel Paint', quantity: parseFloat((length * height * 2 * quantity).toFixed(2)), unit: 'm²', rate: 0, total: 0 }
     );
   }
 
-  if (elementType === 'window') {
+  // 6. Windows
+  else if (elementType === 'window') {
     breakdown.push(
       { material: 'Wooden Window', quantity: quantity, unit: 'nos', rate: 0, total: 0 }
     );

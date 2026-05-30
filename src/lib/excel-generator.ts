@@ -176,7 +176,245 @@ export function downloadBOQExcel(
     { wch: 10 }
   ];
 
-  // ---- 2. Build "Detailed BOQ" Sheet with Formulas ----
+  // ---- 2. Build "Takeoff Calculations" Sheet ----
+  const takeoffData: any[][] = [
+    ['TAKEOFF CALCULATIONS & DIMENSION Takeoff'],
+    [],
+    ['S.No', 'Element Name', 'Takeoff Item Description', 'L (m)', 'W (m)', 'H (m)', 'Qty', 'Gross Qty', 'Unit', 'Deductions', 'Net Qty', 'AI Confidence', 'Takeoff Formula']
+  ];
+
+  const descriptionToCellMap = new Map<string, string>();
+  let takeoffExcelRow = 3;
+  let takeoffCounter = 0;
+
+  elements.forEach((el) => {
+    const is9Inch = el.width > 0.15;
+    const confidenceVal = el.confidence !== undefined ? el.confidence : 1.0;
+
+    // Helper to add takeoff row with dynamic Excel formulas
+    const addTakeoffRow = (desc: string, l: number, w: number, h: number, qty: number, unit: string, calcType: string, deductionVal: number, formulaText: string) => {
+      takeoffCounter++;
+      takeoffExcelRow++;
+
+      const r = takeoffExcelRow; // current 1-indexed row in Excel
+      let grossFormula = '';
+      if (calcType === 'vol') {
+        grossFormula = `D${r}*E${r}*F${r}*G${r}`;
+      } else if (calcType === 'area') {
+        grossFormula = `D${r}*E${r}*G${r}`;
+      } else if (calcType === 'area_wall') {
+        grossFormula = `D${r}*F${r}*G${r}`;
+      } else if (calcType === 'plaster_wall') {
+        grossFormula = `D${r}*F${r}*G${r}*2`;
+      } else if (calcType === 'steel') {
+        grossFormula = `D${r}*E${r}*F${r}*G${r}*80`;
+      } else if (calcType === 'steel_column') {
+        grossFormula = `D${r}*E${r}*F${r}*G${r}*180`;
+      } else if (calcType === 'steel_beam') {
+        grossFormula = `D${r}*E${r}*F${r}*G${r}*120`;
+      } else if (calcType === 'steel_other') {
+        grossFormula = `D${r}*E${r}*F${r}*G${r}*100`;
+      } else if (calcType === 'formwork_footing') {
+        grossFormula = `2*(D${r}+E${r})*F${r}*G${r}`;
+      } else if (calcType === 'formwork_column') {
+        grossFormula = `2*(D${r}+E${r})*F${r}*G${r}`;
+      } else if (calcType === 'formwork_beam') {
+        grossFormula = `(2*F${r}+E${r})*D${r}*G${r}`;
+      } else if (calcType === 'formwork_plinth') {
+        grossFormula = `2*F${r}*D${r}*G${r}`;
+      } else if (calcType === 'qty') {
+        grossFormula = `G${r}`;
+      } else if (calcType === 'paint_door') {
+        grossFormula = `D${r}*F${r}*G${r}*2`;
+      } else {
+        grossFormula = `D${r}*E${r}*F${r}*G${r}`;
+      }
+
+      const netFormula = `H${r}-J${r}`;
+      const grossVal = l * w * h * qty;
+
+      descriptionToCellMap.set(desc, `'Takeoff Calculations'!K${r}`);
+
+      takeoffData.push([
+        takeoffCounter,
+        el.name,
+        desc,
+        l,
+        w,
+        h,
+        qty,
+        { t: 'n', f: grossFormula, v: grossVal },
+        unit,
+        deductionVal,
+        { t: 'n', f: netFormula, v: grossVal - deductionVal },
+        confidenceVal,
+        formulaText
+      ]);
+    };
+
+    if (el.type === 'footing' || el.type === 'foundation') {
+      addTakeoffRow(
+        `Excavation in earth for foundation of ${el.name} (1.2m deep)`,
+        el.length, el.width, 1.2, el.quantity, 'm³', 'vol', 0, 'L * W * 1.2 * Qty'
+      );
+
+      addTakeoffRow(
+        `PCC M10 (1:3:6) bedding under footing of ${el.name} (100mm thick)`,
+        el.length, el.width, 0.1, el.quantity, 'm³', 'vol', 0, 'L * W * 0.1 * Qty'
+      );
+
+      addTakeoffRow(
+        `RCC M20 (1:1.5:3) concrete in footing of ${el.name}`,
+        el.length, el.width, el.height, el.quantity, 'm³', 'vol', 0, 'L * W * H * Qty'
+      );
+
+      addTakeoffRow(
+        `Steel reinforcement for footing of ${el.name}`,
+        el.length, el.width, el.height, el.quantity, 'kg', 'steel', 0, 'Vol * 80 kg/m³'
+      );
+
+      addTakeoffRow(
+        `Plywood formwork for footing of ${el.name}`,
+        el.length, el.width, el.height, el.quantity, 'm²', 'formwork_footing', 0, '2 * (L + W) * H * Qty'
+      );
+
+      addTakeoffRow(
+        `Brickwork in cement mortar (9") below ground level for ${el.name}`,
+        el.length, el.width, 0.9, el.quantity, 'm³', 'vol', 0, 'L * W * 0.9 * Qty'
+      );
+
+      addTakeoffRow(
+        `Damp Proof Course (50mm thick) for plinth of ${el.name}`,
+        el.length, el.width, 1, el.quantity, 'm²', 'area', 0, 'L * W * Qty'
+      );
+
+      addTakeoffRow(
+        `Sand filling under foundation/plinth of ${el.name} (0.6m deep)`,
+        el.length, el.width, 0.6, el.quantity, 'm³', 'vol', 0, 'L * W * 0.6 * Qty'
+      );
+    }
+    else if (el.type === 'slab') {
+      addTakeoffRow(
+        `PCC M10 (1:3:6) floor bedding under slab of ${el.name} (100mm thick)`,
+        el.length, el.width, 0.1, el.quantity, 'm³', 'vol', 0, 'L * W * 0.1 * Qty'
+      );
+
+      addTakeoffRow(
+        `Cement screed bed (50mm thick) for flooring of ${el.name}`,
+        el.length, el.width, 0.05, el.quantity, 'm³', 'vol', 0, 'L * W * 0.05 * Qty'
+      );
+
+      addTakeoffRow(
+        `Vitrified floor tiles with adhesive for slab ${el.name}`,
+        el.length, el.width, 1, el.quantity, 'm²', 'area', 0, 'L * W * Qty'
+      );
+
+      addTakeoffRow(
+        `RCC M20 (1:1.5:3) concrete in roof slab of ${el.name}`,
+        el.length, el.width, el.height, el.quantity, 'm³', 'vol', 0, 'L * W * H * Qty'
+      );
+
+      addTakeoffRow(
+        `Steel reinforcement for roof slab of ${el.name}`,
+        el.length, el.width, el.height, el.quantity, 'kg', 'steel', 0, 'Vol * 80 kg/m³'
+      );
+
+      addTakeoffRow(
+        `Plywood formwork (bottom shuttering) for slab of ${el.name}`,
+        el.length, el.width, 1, el.quantity, 'm²', 'area', 0, 'L * W * Qty'
+      );
+
+      addTakeoffRow(
+        `Cement plaster 12mm (1:6) to ceiling of slab ${el.name}`,
+        el.length, el.width, 1, el.quantity, 'm²', 'area', 0, 'L * W * Qty'
+      );
+
+      addTakeoffRow(
+        `Bituminous membrane waterproofing to top of slab ${el.name}`,
+        el.length, el.width, 1, el.quantity, 'm²', 'area', 0, 'L * W * Qty'
+      );
+    }
+    else if (el.type === 'wall' || el.type === 'parapet') {
+      const deductions = getLocalWallDeductions(el.name, elements);
+
+      addTakeoffRow(
+        `Brickwork in cement mortar (${is9Inch ? '9"' : '4.5"'}) for wall ${el.name} (deducting openings)`,
+        el.length, el.width, el.height, el.quantity, is9Inch ? 'm³' : 'm²',
+        is9Inch ? 'vol' : 'area_wall',
+        is9Inch ? deductions.volume : deductions.area,
+        is9Inch ? 'L * W * H * Qty - Deductions' : 'L * H * Qty - Deductions'
+      );
+
+      addTakeoffRow(
+        `Cement plaster 12mm (1:6) to wall ${el.name} on both sides (deducting openings)`,
+        el.length, el.width, el.height, el.quantity, 'm²',
+        'plaster_wall',
+        deductions.area * 2,
+        'L * H * Qty * 2 - Deductions'
+      );
+    }
+    else if (['column', 'beam', 'lintel', 'staircase', 'plinth'].includes(el.type)) {
+      const steelRatio = el.type === 'column' ? 180 : el.type === 'beam' ? 120 : 100;
+
+      addTakeoffRow(
+        `RCC M20 (1:1.5:3) concrete in ${el.name}`,
+        el.length, el.width, el.height, el.quantity, 'm³', 'vol', 0, 'L * W * H * Qty'
+      );
+
+      addTakeoffRow(
+        `Steel reinforcement for ${el.name}`,
+        el.length, el.width, el.height, el.quantity, 'kg',
+        el.type === 'column' ? 'steel_column' : el.type === 'beam' ? 'steel_beam' : 'steel_other',
+        0,
+        `Vol * ${steelRatio} kg/m³`
+      );
+
+      addTakeoffRow(
+        `Plywood formwork for ${el.name}`,
+        el.length, el.width, el.height, el.quantity, 'm²',
+        el.type === 'column' ? 'formwork_column' : el.type === 'beam' ? 'formwork_beam' : el.type === 'plinth' || el.type === 'lintel' ? 'formwork_plinth' : 'area',
+        0,
+        el.type === 'column' ? '2*(L+W)*H*Qty' : el.type === 'beam' ? '(2*H+W)*L*Qty' : 'Formwork Area'
+      );
+    }
+    else if (el.type === 'door') {
+      addTakeoffRow(
+        `Flush door supply and installation for ${el.name}`,
+        1, 1, 1, el.quantity, 'nos', 'qty', 0, 'Qty'
+      );
+
+      addTakeoffRow(
+        `Enamel painting on door surfaces for ${el.name} (both sides)`,
+        el.length, el.width, el.height, el.quantity, 'm²', 'paint_door', 0, 'L * H * Qty * 2'
+      );
+    }
+    else if (el.type === 'window') {
+      addTakeoffRow(
+        `Wooden window supply and installation for ${el.name}`,
+        1, 1, 1, el.quantity, 'nos', 'qty', 0, 'Qty'
+      );
+    }
+  });
+
+  const takeoffSheet = XLSX.utils.aoa_to_sheet(takeoffData);
+  takeoffSheet['!cols'] = [
+    { wch: 6 },
+    { wch: 15 },
+    { wch: 45 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 8 },
+    { wch: 12 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 15 },
+    { wch: 25 }
+  ];
+  takeoffSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 12 } }];
+
+  // ---- 3. Build "Detailed BOQ" Sheet with Formulas ----
   const detailedData: any[][] = [
     ['DETAILED BILL OF QUANTITIES'],
     [],
@@ -204,11 +442,15 @@ export function downloadBOQExcel(
       const rateFormula = `VLOOKUP(G${currentExcelRow}, 'MasterRates'!A:C, 2, FALSE)`;
       const amountFormula = `D${currentExcelRow}*E${currentExcelRow}`;
 
+      // Quantities reference the cells in the Takeoff Calculations sheet dynamically if available!
+      const takeoffCellRef = descriptionToCellMap.get(item.description);
+      const qtyCell = takeoffCellRef ? { t: 'n', f: takeoffCellRef, v: item.quantity } : item.quantity;
+
       detailedData.push([
         itemCounter,
         item.description,
         item.unit,
-        item.quantity,
+        qtyCell,
         { t: 'n', f: rateFormula, v: item.rate },
         { t: 'n', f: amountFormula, v: item.amount },
         key // column G: Rate Reference
@@ -261,7 +503,7 @@ export function downloadBOQExcel(
   ];
   detailedSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
 
-  // ---- 3. Build "Summary" Sheet with Formulas ----
+  // ---- 4. Build "Summary" Sheet with Formulas ----
   const summaryData: any[][] = [
     ['BILL OF QUANTITIES - SUMMARY'],
     [],
@@ -306,7 +548,7 @@ export function downloadBOQExcel(
   ];
   summarySheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }];
 
-  // ---- 4. Build "Material Breakdown" Sheet with Formulas ----
+  // ---- 5. Build "Material Breakdown" Sheet with Formulas ----
   const materialTotals = new Map<string, { quantity: number; unit: string; rate: number }>();
 
   elements.forEach(el => {
@@ -394,6 +636,7 @@ export function downloadBOQExcel(
   // ---- Append all sheets to Workbook ----
   XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
   XLSX.utils.book_append_sheet(wb, detailedSheet, 'Detailed BOQ');
+  XLSX.utils.book_append_sheet(wb, takeoffSheet, 'Takeoff Calculations');
   XLSX.utils.book_append_sheet(wb, masterRatesSheet, 'MasterRates');
   XLSX.utils.book_append_sheet(wb, matSheet, 'Material Breakdown');
 
