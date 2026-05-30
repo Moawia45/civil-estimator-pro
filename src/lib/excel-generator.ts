@@ -180,7 +180,7 @@ export function downloadBOQExcel(
   const detailedData: any[][] = [
     ['DETAILED BILL OF QUANTITIES'],
     [],
-    ['S.No', 'Description', 'Unit', 'Quantity', 'Rate', 'Amount'],
+    ['S.No', 'Description', 'Unit', 'Quantity', 'Rate', 'Amount', 'Rate Reference'],
   ];
 
   let currentExcelRow = 3; // header row is row 3
@@ -189,7 +189,7 @@ export function downloadBOQExcel(
 
   boqSections.forEach((section) => {
     // Section header row
-    detailedData.push([`--- ${section.title} ---`, '', '', '', '', '']);
+    detailedData.push([`--- ${section.title} ---`, '', '', '', '', '', '']);
     currentExcelRow++;
 
     const firstItemRow = currentExcelRow + 1;
@@ -198,8 +198,10 @@ export function downloadBOQExcel(
       itemCounter++;
       currentExcelRow++;
 
-      // VLOOKUP rate from MasterRates using cell reference, Amount = Qty * Rate
-      const rateFormula = `VLOOKUP(B${currentExcelRow}, 'MasterRates'!A:C, 2, FALSE)`;
+      const key = item.materialName || item.description;
+
+      // VLOOKUP rate from MasterRates using the exact Rate Reference cell (column G)
+      const rateFormula = `VLOOKUP(G${currentExcelRow}, 'MasterRates'!A:C, 2, FALSE)`;
       const amountFormula = `D${currentExcelRow}*E${currentExcelRow}`;
 
       detailedData.push([
@@ -208,7 +210,8 @@ export function downloadBOQExcel(
         item.unit,
         item.quantity,
         { t: 'n', f: rateFormula, v: item.rate },
-        { t: 'n', f: amountFormula, v: item.amount }
+        { t: 'n', f: amountFormula, v: item.amount },
+        key // column G: Rate Reference
       ]);
     });
 
@@ -221,7 +224,8 @@ export function downloadBOQExcel(
 
     detailedData.push([
       '', '', '', '', 'Subtotal:',
-      { t: 'n', f: subtotalFormula, v: section.items.reduce((s, i) => s + i.amount, 0) }
+      { t: 'n', f: subtotalFormula, v: section.items.reduce((s, i) => s + i.amount, 0) },
+      ''
     ]);
 
     sectionSubtotals.push({
@@ -240,7 +244,8 @@ export function downloadBOQExcel(
 
   detailedData.push([
     '', '', '', '', 'GRAND TOTAL:',
-    { t: 'n', f: grandTotalFormula, v: precalculatedGrandTotal }
+    { t: 'n', f: grandTotalFormula, v: precalculatedGrandTotal },
+    ''
   ]);
   const grandTotalDetailedRow = currentExcelRow;
 
@@ -252,8 +257,9 @@ export function downloadBOQExcel(
     { wch: 15 },
     { wch: 15 },
     { wch: 18 },
+    { wch: 30 }
   ];
-  detailedSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+  detailedSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
 
   // ---- 3. Build "Summary" Sheet with Formulas ----
   const summaryData: any[][] = [
